@@ -2,6 +2,26 @@ extends Node
 ## 全局游戏配置常量（Autoload 单例）
 ## 所有魔法数字集中管理，方便调参
 
+
+func _ready() -> void:
+	# 2.7 输入抽象：保证「click」动作在鼠标之外也绑定触摸屏（Android 主力平台）
+	_ensure_click_action()
+
+
+func _ensure_click_action() -> void:
+	if not InputMap.has_action("click"):
+		InputMap.add_action("click", 0.5)
+	# 触屏绑定（project.godot 持久化了鼠标绑定；触摸事件在启动时补上）
+	var has_touch := false
+	for ev in InputMap.action_get_events("click"):
+		if ev is InputEventScreenTouch:
+			has_touch = true
+			break
+	if not has_touch:
+		var touch := InputEventScreenTouch.new()
+		touch.index = 0
+		InputMap.action_add_event("click", touch)
+
 # ===== 世界时间 =====
 ## 资源消耗间隔（秒）
 const CONSUME_INTERVAL: float = 2.0

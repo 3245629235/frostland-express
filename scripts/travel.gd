@@ -365,12 +365,13 @@ func _on_action_button_pressed(id: String) -> void:
 	_hide_action_popup()
 
 
-# ===== 输入：点击地面 → 编队移动 =====
+# ===== 输入：统一「click」动作（2.7 InputMap：鼠标左键 + 触摸屏）=====
 func _unhandled_input(event: InputEvent) -> void:
-	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT and event.pressed:
-		_command_move(event.position)
-	elif event is InputEventScreenTouch and event.pressed:
-		_command_move(event.position)
+	if not event.is_action_pressed("click"):
+		return
+	var pos_variant: Variant = event.get("position")
+	var pos: Vector2 = pos_variant if pos_variant is Vector2 else Vector2.ZERO
+	_command_move(pos)
 
 
 func _command_move(point: Vector2) -> void:
