@@ -1,7 +1,8 @@
 9cad1ddce9e5a63143ba340c9520626b
-::res://::1786951641
+::res://::1786952601
 CODE_WIKI.md::TextFile::-1::1784547736::0::1::::<><><>0<>0<><>::
-export_presets.cfg::TextFile::-1::1784628980::0::1::::<><><>0<>0<><>::
+DEMO_DESIGN.md::TextFile::-1::1786952119::0::1::::<><><>0<>0<><>::
+export_presets.cfg::TextFile::-1::1786952160::0::1::::<><><>0<>0<><>::
 godot-ai-LICENSE.txt::TextFile::-1::1784551214::0::1::::<><><>0<>0<><>::
 icon.svg::CompressedTexture2D::7933483230329462621::1784310058::1786950092::1::::<><><>0<>0<>1d896da136d7f3b1eb7842872eb74e40<>res://.godot/imported/icon.svg-218a8f2b3041327d8a5756f3a245f83b.ctex::
 README.md::TextFile::-1::1784310048::0::1::::<><><>0<>0<><>::
@@ -200,6 +201,9 @@ tank_car.png::CompressedTexture2D::8387067868123088321::1784398448::1786950092::
 tank_car_card.png::CompressedTexture2D::859286507918519995::1784398448::1786950092::1::::<><><>0<>0<>1dad71bff0bf7e8bfe0bd2ba5c07dba2<>res://.godot/imported/tank_car_card.png-ab65de834d71fd272657cd614962903d.ctex::
 ::res://assets/themes/::1786948610
 default_theme.tres::Theme::8291281926477533483::1784460128::0::1::::<><><>0<>0<><>::uid://cwxh4rih6em1a::::res://assets/fonts/simsun.ttc
+::res://dist/::1786952601
+::res://docs/::1786952096
+bug_log.md::TextFile::-1::1786952096::0::1::::<><><>0<>0<><>::
 ::res://scenes/::1786951624
 character_card.tscn::PackedScene::1857019530322244040::1784470242::0::1::::<><><>0<>0<><>::res://scripts/character_card.gd
 character_select_dialog.tscn::PackedScene::119510337707597038::1784468956::0::1::::<><><>0<>0<><>::res://scripts/character_select_dialog.gd<>res://scenes/depot_card.tscn
@@ -236,3 +240,5 @@ train_physics.gd::GDScript::2496838083668476888::1786951569::0::1::::TrainPhysic
 train_placement.gd::GDScript::5316225655952545666::1786951569::0::1::::TrainPlacement<>RefCounted<><>0<>0<><>::
 train_save.gd::GDScript::4797007399194827576::1786951569::0::1::::TrainSave<>RefCounted<><>0<>0<><>::
 world_tick.gd::GDScript::3938208069089290174::1786951569::0::1::::WorldTick<>RefCounted<><>0<>0<><>::
+::res://tools/::1786951852
+::res://tools/__pycache__/::1786951857
