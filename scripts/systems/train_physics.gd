@@ -74,6 +74,4 @@ static func update_physics(delta: float, train: Dictionary, mode: int = 0) -> vo
 
 	if speed < 0:
 		speed = 0.0
-	# DEMO_DESIGN §2.2：速度上限 120 km/h
-	speed = minf(speed, GameConfig.MAX_SPEED_MS)
 	train["speed"] = speed

@@ -2,6 +2,21 @@
 
 > 记录方式：发现日期 | 严重度（高/中/低） | 描述 | 状态
 
+## 2026-08-17（Day 2 用户验收）
+
+### BUG-006 【高】travel 场景视觉回归：雪原视差被车库内饰覆盖、列车消失、速度被 120km/h 上限压慢
+- **现象**（用户验收反馈）：
+  1. 登车页面精心制作的雪原视差场景消失，被编组界面式车库内饰（wall/ceiling_floor 全屏铺满）取代；
+  2. 原车速计算公式被 120 km/h 上限限制，感觉明显变慢；
+  3. 登车页面火车车厢消失，只有 4 个角色；拖拽也无法浏览列车全貌。
+- **定位**：Day 2 以 train_walk 原型重建 travel.tscn 时，未移植 survival.tscn 的 5 层雪原视差（含 y_off/z 序）与 TrainContainer 车厢渲染/拖拽逻辑，并新增了全屏内饰 overlay；Day 2.3 又给 TrainPhysics 加了 MAX_SPEED_MS 钳制。
+- **修复**（2026-08-17）：
+  1. travel.tscn 恢复 survival 原版结构：Layer0Sky~Layer4FrontTree（速度 0/0.15/0.35/0.6/1.6，y_off 0/0/0/215/5）+ TrainContainer（clip_contents）；
+  2. travel.gd 移植 survival 的列车渲染/拖拽/惯性/夹取逻辑（TRAIN_GROUND_SPEED=0.6、3px 拖拽阈值、0.95 惯性衰减），小队随列车拖拽同步移动；
+  3. 删除 TrainPhysics 的 120 km/h 上限与 GameConfig.MAX_SPEED_MS，恢复原始 f_tract/f_aero 公式（实测已重新加速至 100+ m/s 并继续增长）。
+- **验证（MCP 实测）**：5 个视差层各 2 tile 存在、Ground y_off=215；TrainContainer 内 2 节车厢精灵（总宽 1849px>1280px）；注入拖拽 press(640)→motion(300)→release 后车厢 x 从 -284 滑至夹取边界 -1209，惯性生效；角色跟随列车位移，点击 (640,520) 可走回。Day 2 的系统/HUD/交互点全部保留。
+- **状态**：✅ 已修复，待用户复测确认。
+
 ## 2026-08-17（Day 1 冒烟）
 
 ### BUG-001 【高】编组界面与 GameState 数据不同步

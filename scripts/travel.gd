@@ -1,21 +1,31 @@
 extends Node2D
-## 车内第一人称视差行驶场景（Day 2.2）
-## —— 5 层视差滚动 + 车厢内饰 + 随车小队点击行走（编队）
-## 后续接入：world_tick / fuel_system / train_physics（2.3）、生存数值与 HUD（2.4）、交互点（2.5）
+## 车内第一人称视差行驶场景 v3（修复版）
+## —— 恢复 survival 原版：5 层雪原视差 + 列车车厢展示 + 拖拽浏览全貌
+## —— 保留 Day 2：world_tick/fuel/physics 接线、角色状态 HUD、交互点、click 输入抽象
 
-# ===== 视差层配置（后景 4 层 + 前景枯树）=====
-const PARALLAX_LAYERS = [
-	{ "path": "res://assets/sprites/parallax/蓝天不动.png", "speed": 0.0 },
-	{ "path": "res://assets/sprites/parallax/远景云.png", "speed": 0.12 },
-	{ "path": "res://assets/sprites/parallax/中景云.png", "speed": 0.28 },
-	{ "path": "res://assets/sprites/parallax/雪原地.png", "speed": 0.50 },
-	{ "path": "res://assets/sprites/parallax/最前景枯树.png", "speed": 1.40 },
+# ===== 雪原视差层（survival 原版配置：速度倍率 + 纵向偏移）=====
+const PARALLAX_LAYERS := [
+	{ "name": "Sky",       "path": "res://assets/sprites/parallax/蓝天不动.png",   "speed": 0.0,  "y_off": 0 },
+	{ "name": "FarCloud",  "path": "res://assets/sprites/parallax/远景云.png",     "speed": 0.15, "y_off": 0 },
+	{ "name": "MidCloud",  "path": "res://assets/sprites/parallax/中景云.png",     "speed": 0.35, "y_off": 0 },
+	{ "name": "Ground",    "path": "res://assets/sprites/parallax/雪原地.png",     "speed": 0.6,  "y_off": 215 },
+	{ "name": "FrontTree", "path": "res://assets/sprites/parallax/最前景枯树.png", "speed": 1.6,  "y_off": 5 },
 ]
 
 ## 视差滚动系数：滚动速度 = 列车速度(m/s) × 此系数
 const SCROLL_SPEED_FACTOR: float = 80.0
+## 列车拖拽与地面视差同速系数（survival 原版）
+const TRAIN_GROUND_SPEED: float = 0.6
+## 列车展示区域（survival 原版比例）
+const TRAIN_HEIGHT_RATIO: float = 0.36
+const TRAIN_BOTTOM_RATIO: float = 0.82
+const TRAIN_BOTTOM_OFFSET: float = 75.0
+## 拖拽惯性衰减
+const INERTIA_DECAY: float = 0.95
+## 拖拽判定阈值（px）
+const DRAG_THRESHOLD: float = 3.0
 
-## 站点门槛（DEMO_DESIGN §3；Day 3 站点系统完整接入）
+## 站点门槛（DEMO_DESIGN §3）
 const STATIONS: Array = [
 	{"name": "白桦林站", "km": 80.0},
 	{"name": "冻湖站", "km": 180.0},
@@ -29,11 +39,11 @@ const RESOURCE_NAMES := {
 	"parts": "零件", "ammo_small": "小弹药", "ammo_large": "大弹药",
 }
 
-## 车厢内交互点（2.5）：位置 + 颜色 + 动作
+## 车厢内交互点（2.5）：位于列车地板带上
 const INTERACTION_POINTS: Array = [
-	{"id": "boiler", "name": "锅炉", "pos": Vector2(290, 545), "color": Color(0.85, 0.35, 0.2), "action": "加煤"},
-	{"id": "cargo", "name": "物资箱", "pos": Vector2(640, 565), "color": Color(0.55, 0.4, 0.25), "action": "收集物资"},
-	{"id": "repair", "name": "维修台", "pos": Vector2(990, 545), "color": Color(0.45, 0.5, 0.55), "action": "维修"},
+	{"id": "boiler", "name": "锅炉", "pos": Vector2(300, 600), "color": Color(0.85, 0.35, 0.2), "action": "加煤"},
+	{"id": "cargo", "name": "物资箱", "pos": Vector2(640, 615), "color": Color(0.55, 0.4, 0.25), "action": "收集物资"},
+	{"id": "repair", "name": "维修台", "pos": Vector2(980, 600), "color": Color(0.45, 0.5, 0.55), "action": "维修"},
 ]
 const INTERACTION_RADIUS: float = 50.0
 
@@ -53,7 +63,6 @@ shader_type canvas_item;
 
 void fragment() {
 	vec4 c = texture(TEXTURE, UV);
-	// 绿幕判定：绿色通道显著高于红蓝（g>0.5 且 g > 1.4*max(r,b)）
 	if (c.g > 0.5 && c.g > 1.4 * max(c.r, c.b)) {
 		c.a = 0.0;
 	}
@@ -61,7 +70,7 @@ void fragment() {
 }
 """
 
-# 编队偏移（相对点击点）：车长居中，其余两侧/后方
+# 编队偏移（相对点击点）
 const CREW_FORMATION: Array = [
 	Vector2(0, 0),
 	Vector2(-34, 10),
@@ -70,43 +79,54 @@ const CREW_FORMATION: Array = [
 ]
 
 # ===== 可调参数 =====
-@export var train_visual_speed: float = 100.0   # 背景滚动速度（2.3 起由 train_physics 接管）
-@export var walk_speed: float = 250.0            # 小人移动速度
-@export var crew_target_height: float = 180.0    # 角色在画面中的目标高度（绿幕素材原始尺寸很大）
-@export var show_train_interior: bool = true     # 是否显示车厢内饰
-@export var floor_y_range: Vector2 = Vector2(360, 600)  # 可点击行走的纵向范围（地板带）
+@export var walk_speed: float = 250.0
+@export var crew_target_height: float = 180.0
+@export var floor_y_range: Vector2 = Vector2(430, 640)
 
-# ===== 内部状态 =====
-var _layer_states: Array = []  # [{sprites:[Sprite2D,Sprite2D], tex_w:float, speed:float}]
-var _scroll: float = 0.0
+# ===== 视差/列车状态 =====
+var _layers: Array = []                 # [{container, tile_w, speed}]
+var _view_w: float = 1280.0
+var _view_h: float = 720.0
+var _train_scroll: float = 0.0
+var _train_total_w: float = 0.0
+var _dragging_train: bool = false
+var _drag_press_active: bool = false
+var _drag_start_mouse_x: float = -1.0
+var _drag_start_scroll: float = 0.0
+var _drag_threshold_passed: bool = false
+var _train_inertia: float = 0.0
+var _prev_train_scroll: float = 0.0
+
+# ===== 小队状态 =====
 var _crew: Array = []          # [{id, name, sprite, formation_offset}]
 var _target_pos: Vector2 = Vector2.ZERO
 var _is_moving: bool = false
+var _floor_y_min: float = 430.0
+var _floor_y_max: float = 640.0
 
-# ===== 行驶状态（2.3 接入 systems/）=====
-var _distance_km: float = 0.0          # 本程累计里程
-var _travel_time: float = 0.0          # 本程累计行驶时间
-var _breakdown_armed: bool = false     # 抛锚判定使能（有动力加速中才计数）
+# ===== 行驶状态（2.3）=====
+var _distance_km: float = 0.0
+var _travel_time: float = 0.0
+var _breakdown_armed: bool = false
 
-# ===== 动作状态（2.4 收集/维修）=====
+# ===== 动作状态（2.4）=====
 var _is_collecting: bool = false
 var _collect_timer: float = 0.0
-var _action_log: String = ""           # 动作结果播报（显示在状态栏）
+var _action_log: String = ""
 
-# ===== HUD（2.4 资源条/角色状态）=====
-var _resource_bars: Dictionary = {}    # key -> {bar: ProgressBar, label: Label}
-var _char_rows: Array = []             # [{id, hp_bar, status_label}]
+# ===== HUD =====
+var _resource_bars: Dictionary = {}
+var _char_rows: Array = []
 var _res_panel: Control = null
 var _char_panel: Control = null
 
-# ===== 交互点（2.5）=====
-var _pending_interaction: String = ""  # 到达后要弹出的交互点 id
+# ===== 交互点弹窗 =====
+var _pending_interaction: String = ""
 var _action_popup: PanelContainer = null
 var _action_title: Label = null
 var _action_button: Button = null
 
-@onready var _bg_root: Node2D = $BackgroundRoot
-@onready var _interior_root: Node2D = $InteriorRoot
+@onready var _train_container: Control = $TrainContainer
 @onready var _interaction_root: Node2D = $InteractionRoot
 @onready var _crew_root: Node2D = $CrewRoot
 @onready var _hud_status: Label = $HUD/TopBar/StatusLabel
@@ -116,13 +136,14 @@ var _action_button: Button = null
 
 
 func _ready() -> void:
+	_view_w = get_viewport().get_visible_rect().size.x
+	_view_h = get_viewport().get_visible_rect().size.y
+
 	_ensure_crew_state()
 	_setup_parallax()
-	_setup_interior()
 	_setup_crew()
 	_setup_interaction_points()
-	_setup_carriage_dividers()
-	_target_pos = _crew[0]["sprite"].global_position if not _crew.is_empty() else Vector2(400, 520)
+	_target_pos = _crew[0]["sprite"].global_position if not _crew.is_empty() else Vector2(640, 520)
 
 	# ===== 2.3：接入列车系统 =====
 	GameState.refresh_train_runtime_state()
@@ -138,6 +159,9 @@ func _ready() -> void:
 	else:
 		GameState.train_control_mode = 0
 
+	# ===== 列车展示 =====
+	_render_train()
+
 	_hud_accel_btn.pressed.connect(_on_accel_button_pressed)
 	_hud_back_btn.pressed.connect(_on_back_button_pressed)
 	_build_hud()
@@ -152,70 +176,60 @@ func _ensure_crew_state() -> void:
 			GameState.characters.append(cfg.duplicate(true))
 
 
-# ===== 视差背景 =====
+# ===== 雪原视差（survival 原版：Control 容器 + 平铺 + y_off）=====
 func _setup_parallax() -> void:
-	var view_h = get_viewport().get_visible_rect().size.y
-	for cfg in PARALLAX_LAYERS:
+	for i in range(PARALLAX_LAYERS.size()):
+		var cfg: Dictionary = PARALLAX_LAYERS[i]
+		var container: Control = get_node("Layer%d%s" % [i, cfg["name"]])
 		var tex: Texture2D = load(cfg["path"])
 		if tex == null:
+			push_error("travel.gd: 无法加载纹理 %s" % cfg["path"])
 			continue
-		var scale_y: float = view_h / tex.get_height()
-		var display_w: float = tex.get_width() * scale_y
 
-		var sprites: Array = []
-		for i in range(2):
-			var s := Sprite2D.new()
-			s.texture = tex
-			s.scale = Vector2(scale_y, scale_y)
-			s.position.x = i * display_w
-			s.centered = false
-			s.z_index = -10
-			_bg_root.add_child(s)
-			sprites.append(s)
-
-		_layer_states.append({"sprites": sprites, "tex_w": display_w, "speed": cfg["speed"]})
+		var scale: float = _view_h / tex.get_height()
+		var display_w: float = tex.get_width() * scale
+		_spawn_tiles(container, tex, display_w, _view_h, cfg["y_off"])
+		_layers.append({"container": container, "tile_w": display_w, "speed": cfg["speed"]})
 
 
-# ===== 车厢内饰（墙面 + 天花板/地板，与列车同步滚动）=====
-func _setup_interior() -> void:
-	if not show_train_interior:
+func _spawn_tiles(container: Control, tex: Texture2D, display_w: float, display_h: float, y_off: float) -> void:
+	for i in range(2):
+		var sprite := TextureRect.new()
+		sprite.texture = tex
+		sprite.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		sprite.stretch_mode = TextureRect.STRETCH_SCALE
+		sprite.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		sprite.offset_left = float(i) * display_w
+		sprite.offset_right = float(i + 1) * display_w
+		sprite.offset_top = y_off
+		sprite.offset_bottom = y_off + display_h
+		container.add_child(sprite)
+
+
+func _scroll_layer(layer: Dictionary, scroll_delta: float, drag_delta: float) -> void:
+	var children: Array = layer["container"].get_children()
+	if children.is_empty():
 		return
-	var view_h = get_viewport().get_visible_rect().size.y
-	var wall: Texture2D = load("res://assets/sprites/wall.png")
-	var cf: Texture2D = load("res://assets/sprites/ceiling_floor.png")
-
-	if wall:
-		var scale_y: float = view_h / wall.get_height()
-		var w: float = wall.get_width() * scale_y
-		var sprites: Array = []
-		for i in range(2):
-			var s := Sprite2D.new()
-			s.texture = wall
-			s.scale = Vector2(scale_y, scale_y)
-			s.position.x = i * w
-			s.centered = false
-			_interior_root.add_child(s)
-			sprites.append(s)
-		_layer_states.append({"sprites": sprites, "tex_w": w, "speed": 1.0})
-
-	if cf:
-		var scale_y: float = view_h / cf.get_height()
-		var w: float = cf.get_width() * scale_y
-		var sprites: Array = []
-		for i in range(2):
-			var s := Sprite2D.new()
-			s.texture = cf
-			s.scale = Vector2(scale_y, scale_y)
-			s.position.x = i * w
-			s.centered = false
-			_interior_root.add_child(s)
-			sprites.append(s)
-		_layer_states.append({"sprites": sprites, "tex_w": w, "speed": 1.0})
+	var tile_w: float = layer["tile_w"]
+	var speed_mul: float = layer["speed"]
+	# 行驶偏移 + 拖拽视差（drag_delta 以地面速度为单位）
+	var offset: float = scroll_delta * speed_mul + drag_delta * speed_mul / TRAIN_GROUND_SPEED
+	var wrap_w: float = tile_w * 2.0
+	for child in children:
+		var sprite := child as Control
+		if sprite == null:
+			continue
+		var x: float = sprite.offset_left + offset
+		if x + tile_w < 0:
+			x += wrap_w
+		elif x > _view_w:
+			x -= wrap_w
+		sprite.offset_left = x
+		sprite.offset_right = x + tile_w
 
 
 # ===== 随车小队 =====
 func _setup_crew() -> void:
-	# 优先用 GameState 随车成员；不足 4 人用默认角色补齐
 	var ids: Array = []
 	if GameState.characters != null:
 		for c in GameState.characters:
@@ -230,8 +244,8 @@ func _setup_crew() -> void:
 		if not ids.has(def_id):
 			ids.append(def_id)
 
-	# 出生编队：排在车中央地板带上
-	var base := Vector2(640, 520)
+	var band: Dictionary = _train_band()
+	var base := Vector2(_view_w / 2.0, (band["top"] + band["bottom"]) / 2.0 - 30)
 	var chroma := _make_chroma_key_material()
 	for i in range(ids.size()):
 		var id: String = ids[i]
@@ -286,23 +300,6 @@ func _setup_interaction_points() -> void:
 		point.add_child(label)
 
 
-## 编组数据影响车内展示：每节车厢之间画一道隔断，并在 HUD 显示编组构成（2.6）
-func _setup_carriage_dividers() -> void:
-	var carriages: Array = GameState.train.get("carriages", [])
-	if carriages.size() <= 1:
-		return
-	var view_w: float = get_viewport().get_visible_rect().size.x
-	for i in range(1, carriages.size()):
-		var x: float = view_w * float(i) / carriages.size()
-		var poly := Polygon2D.new()
-		poly.polygon = PackedVector2Array([
-			Vector2(x - 3, 400), Vector2(x + 3, 400),
-			Vector2(x + 3, 620), Vector2(x - 3, 620),
-		])
-		poly.color = Color(0.12, 0.09, 0.06, 0.75)
-		_interior_root.add_child(poly)
-
-
 func _show_action_popup(id: String) -> void:
 	var cfg: Dictionary = {}
 	for c in INTERACTION_POINTS:
@@ -349,7 +346,6 @@ func _hide_action_popup() -> void:
 
 
 func _on_action_button_pressed(id: String) -> void:
-	# 体力 0 不可操作交互点（DEMO_DESIGN §2.3）
 	var leader_id: String = _crew[0]["id"] if not _crew.is_empty() else ""
 	var leader: Dictionary = _find_character_by_id(leader_id)
 	if not leader.is_empty() and float(leader.get("stamina", 0.0)) <= 0.0:
@@ -365,17 +361,56 @@ func _on_action_button_pressed(id: String) -> void:
 	_hide_action_popup()
 
 
-# ===== 输入：统一「click」动作（2.7 InputMap：鼠标左键 + 触摸屏）=====
+# ===== 输入：统一「click」动作 + 列车拖拽浏览 =====
 func _unhandled_input(event: InputEvent) -> void:
-	if not event.is_action_pressed("click"):
-		return
 	var pos_variant: Variant = event.get("position")
 	var pos: Vector2 = pos_variant if pos_variant is Vector2 else Vector2.ZERO
-	_command_move(pos)
+
+	if event.is_action_pressed("click"):
+		_on_click_pressed(pos)
+	elif event.is_action_released("click"):
+		_on_click_released(pos)
+	elif event is InputEventMouseMotion and _drag_press_active:
+		_handle_drag_motion(pos.x)
+
+
+func _on_click_pressed(pos: Vector2) -> void:
+	_drag_press_active = true
+	_drag_start_mouse_x = pos.x
+	_drag_start_scroll = _train_scroll
+	_drag_threshold_passed = false
+	_dragging_train = false
+	_train_inertia = 0.0
+
+
+func _on_click_released(pos: Vector2) -> void:
+	# 没拖拽 → 这是一次点击：小队走过去（点击交互点则弹操作按钮）
+	if _drag_press_active and not _dragging_train:
+		_command_move(pos)
+	_drag_press_active = false
+	_dragging_train = false
+	_drag_start_mouse_x = -1.0
+	_drag_threshold_passed = false
+
+
+func _handle_drag_motion(mouse_x: float) -> void:
+	if not _drag_press_active or _drag_start_mouse_x < 0.0:
+		return
+	# 仅当列车比屏幕宽时才能拖拽浏览全貌
+	if _train_total_w <= _view_w:
+		return
+	if not _dragging_train and abs(mouse_x - _drag_start_mouse_x) > DRAG_THRESHOLD:
+		_dragging_train = true
+		_drag_threshold_passed = true
+	if _dragging_train:
+		var prev_scroll: float = _train_scroll
+		_train_scroll = _drag_start_scroll + (mouse_x - _drag_start_mouse_x) * TRAIN_GROUND_SPEED
+		_train_inertia = _train_scroll - prev_scroll
+		_clamp_train_scroll()
+		_refresh_train_sprites()
 
 
 func _command_move(point: Vector2) -> void:
-	# 点击交互点附近 → 记住目标交互点，到达后弹操作按钮
 	_pending_interaction = ""
 	_hide_action_popup()
 	for cfg in INTERACTION_POINTS:
@@ -383,8 +418,8 @@ func _command_move(point: Vector2) -> void:
 			_pending_interaction = cfg["id"]
 			break
 	var p := Vector2(
-		clampf(point.x, 40, get_viewport().get_visible_rect().size.x - 40),
-		clampf(point.y, floor_y_range.x, floor_y_range.y),
+		clampf(point.x, 40, _view_w - 40),
+		clampf(point.y, _floor_y_min, _floor_y_max),
 	)
 	_target_pos = p
 	_is_moving = true
@@ -392,7 +427,7 @@ func _command_move(point: Vector2) -> void:
 
 # ===== 主循环 =====
 func _process(delta: float) -> void:
-	# 1. 世界推进：物理/食物/燃料系统（2.3）
+	# 1. 世界推进
 	var crew_count: int = _crew.size() if not _crew.is_empty() else (GameState.characters.size() if GameState.characters != null else 0)
 	GameState.tick_world(delta, crew_count)
 
@@ -401,24 +436,30 @@ func _process(delta: float) -> void:
 	GameState.travel_time = _travel_time
 	_distance_km += train_speed * delta / 1000.0
 
-	# 2. 视差滚动由真实车速驱动（无编组时退回演示速度）
-	var scroll_speed: float = train_speed * SCROLL_SPEED_FACTOR
-	if GameState.train.get("carriages", []).is_empty():
-		scroll_speed = train_visual_speed
-	_scroll += scroll_speed * delta
-	for state in _layer_states:
-		var sprites: Array = state["sprites"]
-		var w: float = state["tex_w"]
-		var s: float = state["speed"]
-		for i in range(sprites.size()):
-			var sprite: Sprite2D = sprites[i]
-			var base_x: float = i * w
-			var x: float = base_x - fmod(_scroll * s, w * sprites.size())
-			if x + w < -10:
-				x += w * sprites.size()
-			sprite.position.x = x
+	# 2. 拖拽惯性
+	if not _dragging_train and abs(_train_inertia) > 0.3:
+		_train_scroll += _train_inertia
+		_train_inertia *= INERTIA_DECAY
+		if abs(_train_inertia) < 0.3:
+			_train_inertia = 0.0
+		_clamp_train_scroll()
+		_refresh_train_sprites()
 
-	# 3. 抛锚检测 + 收集进度 + HUD
+	# 3. 拖拽视差量（同步给所有视差层与小队）
+	var drag_delta: float = _train_scroll - _prev_train_scroll
+	_prev_train_scroll = _train_scroll
+
+	var scroll_delta: float = train_speed * SCROLL_SPEED_FACTOR * delta
+	for layer in _layers:
+		_scroll_layer(layer, scroll_delta, drag_delta)
+
+	# 小队跟随列车拖拽同步移动
+	if abs(drag_delta) > 0.001:
+		for member in _crew:
+			(member["sprite"] as Sprite2D).position.x += drag_delta
+		_target_pos.x += drag_delta
+
+	# 4. 抛锚检测 + 收集进度 + HUD
 	_check_breakdown()
 	if _is_collecting:
 		_collect_timer += delta
@@ -426,11 +467,10 @@ func _process(delta: float) -> void:
 			_complete_collection()
 	_update_hud()
 
-	# 4. 编队移动
+	# 5. 编队移动
 	if not _is_moving:
 		return
 
-	# 编队整体移动：每人朝各自目标点走
 	var all_arrived := true
 	for member in _crew:
 		var sprite: Sprite2D = member["sprite"]
@@ -451,6 +491,98 @@ func _process(delta: float) -> void:
 			_show_action_popup(_pending_interaction)
 
 
+# ===== 列车展示（survival 原版：车厢精灵渲染 + 裁剪 + 拖拽）=====
+func _train_band() -> Dictionary:
+	var train_height: float = _view_h * TRAIN_HEIGHT_RATIO
+	var train_bottom: float = _view_h * TRAIN_BOTTOM_RATIO + TRAIN_BOTTOM_OFFSET
+	return {"top": train_bottom - train_height, "bottom": train_bottom, "height": train_height}
+
+
+func _render_train() -> void:
+	var carriages: Array = GameState.train.get("carriages", [])
+	if carriages.is_empty():
+		_train_container.visible = false
+		return
+
+	_train_container.visible = true
+	var band: Dictionary = _train_band()
+	_train_container.offset_top = band["top"]
+	_train_container.offset_bottom = band["bottom"]
+	_train_container.mouse_filter = Control.MOUSE_FILTER_IGNORE
+
+	_floor_y_min = band["top"] + 20.0
+	_floor_y_max = band["bottom"] - 30.0
+
+	var vehicle_sizes: Array = []
+	_train_total_w = 0.0
+	for c in carriages:
+		var vtype = VehicleTypes.STR_TYPE.get(str(c.get("type", "")))
+		if vtype == null:
+			continue
+		var path: String = VehicleTypes.CONFIG[vtype]["vehicle_path"]
+		var tex: Texture2D = load(path)
+		if tex == null:
+			continue
+		var scale: float = band["height"] / tex.get_height()
+		var w: float = tex.get_width() * scale
+		vehicle_sizes.append({"tex": tex, "w": w, "flipped": bool(c.get("flipped", false))})
+		_train_total_w += w
+
+	if vehicle_sizes.is_empty():
+		return
+
+	_train_scroll = (_view_w - _train_total_w) / 2.0
+	_prev_train_scroll = _train_scroll
+	_apply_train_positions(vehicle_sizes, band["height"])
+
+
+func _apply_train_positions(vehicle_sizes: Array, train_height: float) -> void:
+	for child in _train_container.get_children():
+		child.queue_free()
+
+	var current_x: float = _train_scroll
+	for v in vehicle_sizes:
+		var sprite := TextureRect.new()
+		sprite.texture = v["tex"]
+		sprite.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		sprite.stretch_mode = TextureRect.STRETCH_SCALE
+		sprite.flip_h = v["flipped"]
+		sprite.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		sprite.offset_left = current_x
+		sprite.offset_right = current_x + v["w"]
+		sprite.offset_top = 0.0
+		sprite.offset_bottom = train_height
+		_train_container.add_child(sprite)
+		current_x += v["w"]
+
+
+func _clamp_train_scroll() -> void:
+	if _train_total_w <= _view_w:
+		_train_scroll = (_view_w - _train_total_w) / 2.0
+	else:
+		_train_scroll = clamp(_train_scroll, _view_w / 2.0 - _train_total_w, _view_w / 2.0)
+
+
+func _refresh_train_sprites() -> void:
+	var carriages: Array = GameState.train.get("carriages", [])
+	if carriages.is_empty():
+		return
+	var band: Dictionary = _train_band()
+	var vehicle_sizes: Array = []
+	for c in carriages:
+		var vtype = VehicleTypes.STR_TYPE.get(str(c.get("type", "")))
+		if vtype == null:
+			continue
+		var path: String = VehicleTypes.CONFIG[vtype]["vehicle_path"]
+		var tex: Texture2D = load(path)
+		if tex == null:
+			continue
+		var scale: float = band["height"] / tex.get_height()
+		var w: float = tex.get_width() * scale
+		vehicle_sizes.append({"tex": tex, "w": w, "flipped": bool(c.get("flipped", false))})
+	_apply_train_positions(vehicle_sizes, band["height"])
+
+
 # ===== 2.3 行驶系统：抛锚 / HUD / 控制 =====
 func _check_breakdown() -> void:
 	if not GameState.is_traveling:
@@ -459,7 +591,6 @@ func _check_breakdown() -> void:
 	if has_power:
 		_breakdown_armed = true
 		return
-	# 失去动力且列车完全停下 → 记一次抛锚（生存模式 3 次失败）
 	if _breakdown_armed and GameState.get_train_speed() <= 0.05:
 		_breakdown_armed = false
 		GameState.breakdown_count += 1
@@ -509,7 +640,6 @@ func _next_station_text() -> String:
 
 
 func _build_hud() -> void:
-	# ---- 资源条（2×? 网格）----
 	_res_panel = GridContainer.new()
 	_res_panel.name = "ResourcePanel"
 	_res_panel.columns = 3
@@ -532,7 +662,6 @@ func _build_hud() -> void:
 		_res_panel.add_child(vbox)
 		_resource_bars[key] = {"bar": bar, "label": label}
 
-	# ---- 角色状态行 ----
 	_char_panel = VBoxContainer.new()
 	_char_panel.name = "CharacterPanel"
 	_char_panel.position = Vector2(12, 300)
@@ -598,7 +727,7 @@ func _on_accel_button_pressed() -> void:
 	GameState.refresh_train_runtime_state()
 	if not GameState.has_powered_locomotive():
 		print("[DEBUG travel._on_accel_button_pressed] 无动力机车：需要机车+煤水车+燃料")
-		_hud_status.text += "  ⚠无动力(需机车+煤水车+燃料)"
+		_action_log = "无动力：需要机车+煤水车+燃料"
 		return
 	GameState.train_control_mode = 1
 	_breakdown_armed = true
@@ -610,7 +739,7 @@ func _on_back_button_pressed() -> void:
 	get_tree().change_scene_to_file("res://scenes/main.tscn")
 
 
-# ===== 2.4 收集 / 维修 / 加煤（2.5 由交互点按钮调用）=====
+# ===== 2.4 收集 / 维修 / 加煤 =====
 func _start_collect() -> void:
 	if _is_collecting:
 		return
@@ -629,7 +758,6 @@ func _complete_collection() -> void:
 	_action_log = "收集完成：食物 +%d，燃料 +%d" % [food_gain, fuel_gain]
 
 
-## 维修（DEMO_DESIGN §2.4）：≥90 修满；50~89 行驶/停靠 +20 上限90；25~49 仅停靠 +10；<25 不可修
 func _do_repair() -> void:
 	var hp: float = GameState.train["health"]
 	var stopped: bool = GameState.get_train_speed() <= 0.01
@@ -658,7 +786,6 @@ func _do_repair() -> void:
 		_action_log = "列车损坏过重（<25%），无法维修"
 
 
-## 锅炉加煤：全局燃料池 → 煤水车（逐个补满，上限25）
 func _do_refuel() -> void:
 	var carriages: Array = GameState.train.get("carriages", [])
 	if carriages.is_empty():

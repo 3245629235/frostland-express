@@ -4,14 +4,62 @@
 
 [node name="Travel" type="Node2D"]
 script = ExtResource("1_script")
-train_visual_speed = 100.0
 walk_speed = 250.0
 
-[node name="BackgroundRoot" type="Node2D" parent="."]
-z_index = -10
+; ---- 雪原视差层（survival 原版 5 层，含 y_off 与 z 序）----
 
-[node name="InteriorRoot" type="Node2D" parent="."]
+[node name="Layer0Sky" type="Control" parent="."]
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+z_index = 0
+
+[node name="Layer1FarCloud" type="Control" parent="."]
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+z_index = 1
+
+[node name="Layer2MidCloud" type="Control" parent="."]
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+z_index = 2
+
+[node name="Layer3Ground" type="Control" parent="."]
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+z_index = 3
+
+[node name="Layer4FrontTree" type="Control" parent="."]
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+z_index = 6
+
+; ---- 列车展示（车厢精灵 + 裁剪，支持拖拽浏览全貌）----
+
+[node name="TrainContainer" type="Control" parent="."]
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+clip_contents = true
 z_index = 5
+
+; ---- 车厢内交互点 / 随车小队 / HUD ----
 
 [node name="InteractionRoot" type="Node2D" parent="."]
 z_index = 9
@@ -25,7 +73,7 @@ z_index = 10
 offset_left = 12.0
 offset_top = 12.0
 offset_right = 420.0
-offset_bottom = 160.0
+offset_bottom = 170.0
 
 [node name="StatusLabel" type="Label" parent="HUD/TopBar"]
 custom_minimum_size = Vector2(400, 44)
