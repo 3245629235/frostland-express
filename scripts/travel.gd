@@ -637,14 +637,17 @@ func _compute_vehicle_sizes() -> Array:
 	return sizes
 
 
-## 可通行区间：普通车厢整节可走；机车只允许司机室（车尾端 25%），锅炉段禁止过人
+## 可通行区间：普通车厢整节可走；机车只允许司机室（未翻转=右端 33%，翻转=左端 33%），锅炉段禁止过人
 func _rebuild_walkable_segments() -> void:
 	_walkable_segments.clear()
 	var x: float = _train_scroll
 	for v in _train_vehicle_sizes:
 		var w: float = v["w"]
 		if v["type"] == "locomotive":
-			_walkable_segments.append([x, x + w * LOCO_CAB_RATIO])
+			if bool(v["flipped"]):
+				_walkable_segments.append([x, x + w * LOCO_CAB_RATIO])
+			else:
+				_walkable_segments.append([x + w * (1.0 - LOCO_CAB_RATIO), x + w])
 		else:
 			_walkable_segments.append([x, x + w])
 		x += w
