@@ -1,4 +1,4 @@
-﻿extends Node
+extends Node
 ## 全局游戏配置常量（Autoload 单例）
 ## 所有魔法数字集中管理，方便调参
 

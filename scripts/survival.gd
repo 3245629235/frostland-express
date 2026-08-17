@@ -1,4 +1,4 @@
-﻿extends Control
+extends Control
 ## 视差滚动场景 —— 雪原 + 控制台
 
 const PARALLAX_LAYERS := [

@@ -1,4 +1,4 @@
-﻿extends RefCounted
+extends RefCounted
 class_name FuelSystem
 ## 燃油系统 — 补给、消耗、机车动力校验
 

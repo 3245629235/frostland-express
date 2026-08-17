@@ -1,4 +1,4 @@
-﻿extends RefCounted
+extends RefCounted
 class_name WorldTick
 ## 世界时间推进 —— 管理消耗周期，调度物理 + 燃油系统
 

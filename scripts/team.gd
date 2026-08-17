@@ -1,4 +1,4 @@
-﻿extends Control
+extends Control
 
 # ===== 可在编辑器中调整的参数 =====
 @export var wall_speed_ratio: float = 0.8

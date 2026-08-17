@@ -1,4 +1,4 @@
-﻿extends Node2D
+extends Node2D
 
 ## 点击移动测试 —— 鼠标点击走到指定位置
 

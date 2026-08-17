@@ -1,0 +1,11 @@
+# Godot 缓存与导入产物
+.godot/
+*.tmp
+
+# 构建产物
+dist/
+build/
+
+# 系统文件
+Thumbs.db
+Desktop.ini

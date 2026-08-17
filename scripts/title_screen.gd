@@ -1,4 +1,4 @@
-﻿extends Control
+extends Control
 
 const MAIN_SCENE_PATH := "res://scenes/main.tscn"
 

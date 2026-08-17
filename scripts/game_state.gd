@@ -1,4 +1,4 @@
-﻿extends Node
+extends Node
 # ===== 全局游戏状态单例（Autoload）=====
 # 职责：状态存取 + 持久化 + 公开 API
 # 物理/燃油/世界推进 → 委托给 systems/ 下的专用类

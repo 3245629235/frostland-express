@@ -1,4 +1,4 @@
-﻿extends RefCounted
+extends RefCounted
 class_name TrainPhysics
 ## 列车物理引擎 —— 纯计算，不持有状态
 

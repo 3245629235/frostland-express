@@ -1,4 +1,4 @@
-﻿extends RefCounted
+extends RefCounted
 class_name TrainSave
 ## 列车编组同步 —— 唯一真相源为 GameState，不再写独立文件
 

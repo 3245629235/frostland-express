@@ -1,4 +1,4 @@
-﻿extends RefCounted
+extends RefCounted
 class_name TrainParallax
 ## 列车编组界面的视差滚动系统
 

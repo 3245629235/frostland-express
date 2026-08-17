@@ -1,4 +1,4 @@
-﻿extends RefCounted
+extends RefCounted
 class_name TrainPlacement
 ## 列车编组放置/回收规则引擎（纯静态方法，无状态）
 

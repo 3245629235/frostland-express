@@ -1,4 +1,4 @@
-﻿extends Control
+extends Control
 
 const CHARACTER_CARD_SCENE: PackedScene = preload("res://scenes/character_card.tscn")
 const EMPTY_SLOT_SCENE: PackedScene = preload("res://scenes/empty_slot.tscn")
