@@ -31,6 +31,10 @@ const FLOOR_HEIGHT: float = 30.0
 const INERTIA_DECAY: float = 0.95
 ## 拖拽判定阈值（px）
 const DRAG_THRESHOLD: float = 3.0
+## 画面缩放范围/步长
+const ZOOM_MIN: float = 0.6
+const ZOOM_MAX: float = 1.8
+const ZOOM_STEP: float = 0.1
 
 ## 站点门槛（DEMO_DESIGN §3）
 const STATIONS: Array = [
@@ -87,13 +91,14 @@ const CREW_FORMATION: Array = [
 
 # ===== 可调参数 =====
 @export var walk_speed: float = 250.0
-@export var crew_target_height: float = 140.0
+@export var crew_target_height: float = 93.0
 @export var floor_y_range: Vector2 = Vector2(430, 640)
 
 # ===== 视差/列车状态 =====
 var _layers: Array = []                 # [{container, tile_w, speed}]
 var _view_w: float = 1280.0
 var _view_h: float = 720.0
+var _zoom: float = 1.0
 var _train_scroll: float = 0.0
 var _train_total_w: float = 0.0
 var _train_vehicle_sizes: Array = []   # [{type, w, tex, flipped}]
@@ -140,19 +145,24 @@ var _interaction_points: Array = []      # [{cfg, node}]，节点在最上层绘
 var _train_band_top: float = 406.0
 var _carriage_strips: Array = []         # 地板/天花板装饰带 [{node, top, bottom}]
 
-@onready var _train_container: Control = $TrainContainer
-@onready var _interaction_root: Node2D = $InteractionRoot
-@onready var _crew_root: Node2D = $CrewRoot
+@onready var _world: Node2D = $World
+@onready var _train_container: Control = $World/TrainContainer
+@onready var _interaction_root: Node2D = $World/InteractionRoot
+@onready var _crew_root: Node2D = $World/CrewRoot
 @onready var _hud_status: Label = $HUD/TopBar/StatusLabel
 @onready var _hud_carriage: Label = $HUD/TopBar/CarriageLabel
 @onready var _hud_accel_btn: Button = $HUD/TopBar/AccelButton
 @onready var _hud_brake_btn: Button = $HUD/TopBar/BrakeButton
+@onready var _hud_zoom_out_btn: Button = $HUD/TopBar/ZoomBox/ZoomOutButton
+@onready var _hud_zoom_reset_btn: Button = $HUD/TopBar/ZoomBox/ZoomResetButton
+@onready var _hud_zoom_in_btn: Button = $HUD/TopBar/ZoomBox/ZoomInButton
 @onready var _hud_back_btn: Button = $HUD/TopBar/BackButton
 
 
 func _ready() -> void:
 	_view_w = get_viewport().get_visible_rect().size.x
 	_view_h = get_viewport().get_visible_rect().size.y
+	_apply_zoom()
 
 	_ensure_crew_state()
 	_setup_parallax()
@@ -180,6 +190,9 @@ func _ready() -> void:
 
 	_hud_accel_btn.pressed.connect(_on_accel_button_pressed)
 	_hud_brake_btn.pressed.connect(_on_brake_button_pressed)
+	_hud_zoom_out_btn.pressed.connect(_on_zoom_out_pressed)
+	_hud_zoom_reset_btn.pressed.connect(_on_zoom_reset_pressed)
+	_hud_zoom_in_btn.pressed.connect(_on_zoom_in_pressed)
 	_hud_back_btn.pressed.connect(_on_back_button_pressed)
 	_build_hud()
 	_update_hud()
@@ -197,7 +210,7 @@ func _ensure_crew_state() -> void:
 func _setup_parallax() -> void:
 	for i in range(PARALLAX_LAYERS.size()):
 		var cfg: Dictionary = PARALLAX_LAYERS[i]
-		var container: Control = get_node("Layer%d%s" % [i, cfg["name"]])
+		var container: Control = _world.get_node("Layer%d%s" % [i, cfg["name"]])
 		var tex: Texture2D = load(cfg["path"])
 		if tex == null:
 			push_error("travel.gd: 无法加载纹理 %s" % cfg["path"])
@@ -327,7 +340,7 @@ func _setup_carriage_strips() -> void:
 		poly.name = d["name"]
 		poly.color = d["color"]
 		poly.z_index = 7
-		add_child(poly)
+		_world.add_child(poly)
 		_carriage_strips.append({"node": poly, "top": d["top"], "bottom": d["bottom"]})
 
 
@@ -383,7 +396,7 @@ func _sync_interaction_points() -> void:
 			continue
 		var pos: Vector2 = _interaction_screen_pos(cfg)
 		node.position = pos
-		node.visible = pos.x >= -40.0 and pos.x <= _view_w + 40.0
+		node.visible = pos.x >= _local_visible_min_x() - 40.0 and pos.x <= _local_visible_max_x() + 40.0
 
 
 func _show_action_popup(id: String) -> void:
@@ -419,7 +432,7 @@ func _show_action_popup(id: String) -> void:
 	if _action_button.pressed.is_connected(_on_action_button_pressed):
 		_action_button.pressed.disconnect(_on_action_button_pressed)
 	_action_button.pressed.connect(_on_action_button_pressed.bind(id))
-	var popup_pos: Vector2 = _interaction_screen_pos(cfg) + Vector2(-80, -150)
+	var popup_pos: Vector2 = _local_to_screen(_interaction_screen_pos(cfg)) + Vector2(-80, -150)
 	popup_pos.x = clampf(popup_pos.x, 12, 1180)
 	popup_pos.y = clampf(popup_pos.y, 12, 560)
 	_action_popup.position = popup_pos
@@ -451,13 +464,15 @@ func _on_action_button_pressed(id: String) -> void:
 func _unhandled_input(event: InputEvent) -> void:
 	var pos_variant: Variant = event.get("position")
 	var pos: Vector2 = pos_variant if pos_variant is Vector2 else Vector2.ZERO
+	# 屏幕坐标 → 世界局部坐标（画面缩放后内部逻辑仍用局部坐标）
+	var local: Vector2 = _screen_to_local(pos)
 
 	if event.is_action_pressed("click"):
-		_on_click_pressed(pos)
+		_on_click_pressed(local)
 	elif event.is_action_released("click"):
-		_on_click_released(pos)
+		_on_click_released(local)
 	elif event is InputEventMouseMotion and _drag_press_active:
-		_handle_drag_motion(pos.x)
+		_handle_drag_motion(local.x)
 
 
 func _on_click_pressed(pos: Vector2) -> void:
@@ -518,14 +533,14 @@ func _command_move(point: Vector2) -> void:
 	_is_moving = true
 
 
-## 把目标点钳制到列车内部可通行区：x 在「列车内容 ∩ 屏幕可见」内再吸附到最近可通行段，y 固定地板线
+## 把目标点钳制到列车内部可通行区：x 在「列车内容 ∩ 屏幕可见（局部）」内再吸附到最近可通行段，y 固定地板线
 func _clamp_to_train(p: Vector2) -> Vector2:
 	var margin: float = 60.0
-	var min_x: float = maxf(_train_scroll + margin, 40.0)
-	var max_x: float = minf(_train_scroll + _train_total_w - margin, _view_w - 40.0)
+	var min_x: float = maxf(_train_scroll + margin, _local_visible_min_x())
+	var max_x: float = minf(_train_scroll + _train_total_w - margin, _local_visible_max_x())
 	if max_x < min_x:
-		min_x = 40.0
-		max_x = _view_w - 40.0
+		min_x = _local_visible_min_x()
+		max_x = _local_visible_max_x()
 	var visible_x: float = clampf(p.x, min_x, max_x)
 	return Vector2(
 		_nearest_walkable_x(visible_x),
@@ -631,6 +646,45 @@ func _train_band() -> Dictionary:
 	return {"top": train_bottom - train_height, "bottom": train_bottom, "height": train_height}
 
 
+# ===== 画面缩放（世界缩放，HUD 固定）=====
+func _apply_zoom() -> void:
+	if _world == null:
+		return
+	_world.position = Vector2(_view_w * 0.5, _view_h * 0.5) * (1.0 - _zoom)
+	_world.scale = Vector2(_zoom, _zoom)
+
+
+func _screen_to_local(p: Vector2) -> Vector2:
+	return _world.to_local(p) if _world != null else p
+
+
+func _local_to_screen(p: Vector2) -> Vector2:
+	return _world.to_global(p) if _world != null else p
+
+
+func _local_visible_min_x() -> float:
+	return _view_w * 0.5 - _view_w / (2.0 * _zoom)
+
+
+func _local_visible_max_x() -> float:
+	return _view_w * 0.5 + _view_w / (2.0 * _zoom)
+
+
+func _on_zoom_in_pressed() -> void:
+	_zoom = clampf(_zoom + ZOOM_STEP, ZOOM_MIN, ZOOM_MAX)
+	_apply_zoom()
+
+
+func _on_zoom_out_pressed() -> void:
+	_zoom = clampf(_zoom - ZOOM_STEP, ZOOM_MIN, ZOOM_MAX)
+	_apply_zoom()
+
+
+func _on_zoom_reset_pressed() -> void:
+	_zoom = 1.0
+	_apply_zoom()
+
+
 func _render_train() -> void:
 	var carriages: Array = GameState.train.get("carriages", [])
 	if carriages.is_empty():
@@ -705,15 +759,17 @@ func _rebuild_walkable_segments() -> void:
 		x += w
 
 
-## 返回离 target_x 最近的可通行 x（只考虑屏幕内可见的可通行段）
+## 返回离 target_x 最近的可通行 x（只考虑屏幕内可见的可通行段，世界局部坐标）
 func _nearest_walkable_x(target_x: float) -> float:
 	if _walkable_segments.is_empty():
 		return target_x
+	var visible_min: float = _local_visible_min_x()
+	var visible_max: float = _local_visible_max_x()
 	var best_x: float = target_x
 	var best_dist: float = INF
 	for seg in _walkable_segments:
-		var lo: float = maxf(seg[0], 40.0)
-		var hi: float = minf(seg[1], _view_w - 40.0)
+		var lo: float = maxf(seg[0], visible_min)
+		var hi: float = minf(seg[1], visible_max)
 		if lo > hi:
 			continue  # 该段当前完全在屏幕外，不吸附
 		if target_x >= lo and target_x <= hi:
@@ -727,7 +783,7 @@ func _nearest_walkable_x(target_x: float) -> float:
 			best_dist = dist
 			best_x = clampf(target_x, lo, hi)
 	if best_dist == INF:
-		return clampf(target_x, 40.0, _view_w - 40.0)
+		return clampf(target_x, visible_min, visible_max)
 	return best_x
 
 
