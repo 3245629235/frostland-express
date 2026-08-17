@@ -31,8 +31,8 @@ const FLOOR_HEIGHT: float = 30.0
 const INERTIA_DECAY: float = 0.95
 ## 拖拽判定阈值（px）
 const DRAG_THRESHOLD: float = 3.0
-## 画面缩放范围/步长
-const ZOOM_MIN: float = 0.6
+## 画面缩放范围/步长：只允许从原始比例放大（不能缩小到 1.0 以下）
+const ZOOM_MIN: float = 1.0
 const ZOOM_MAX: float = 1.8
 const ZOOM_STEP: float = 0.1
 
@@ -162,7 +162,6 @@ var _carriage_strips: Array = []         # 地板/天花板装饰带 [{node, top
 func _ready() -> void:
 	_view_w = get_viewport().get_visible_rect().size.x
 	_view_h = get_viewport().get_visible_rect().size.y
-	_apply_zoom()
 
 	_ensure_crew_state()
 	_setup_parallax()
@@ -183,6 +182,7 @@ func _ready() -> void:
 
 	# ===== 列车展示（先渲染：决定车厢区域与滚动基准）=====
 	_render_train()
+	_apply_zoom()  # 地板线已知后应用缩放锚点
 	_setup_carriage_strips()
 	_setup_crew()
 	_setup_interaction_points()
@@ -659,7 +659,8 @@ func _train_band() -> Dictionary:
 func _apply_zoom() -> void:
 	if _world == null:
 		return
-	_world.position = Vector2(_view_w * 0.5, _view_h * 0.5) * (1.0 - _zoom)
+	# 锚点：水平仍以屏幕中心为基准；垂直以地板线为基准（缩放时地板保持不动）
+	_world.position = Vector2(_view_w * 0.5, _floor_y_min) * (1.0 - _zoom)
 	_world.scale = Vector2(_zoom, _zoom)
 
 
