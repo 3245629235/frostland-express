@@ -110,6 +110,7 @@ var _action_button: Button = null
 @onready var _interaction_root: Node2D = $InteractionRoot
 @onready var _crew_root: Node2D = $CrewRoot
 @onready var _hud_status: Label = $HUD/TopBar/StatusLabel
+@onready var _hud_carriage: Label = $HUD/TopBar/CarriageLabel
 @onready var _hud_accel_btn: Button = $HUD/TopBar/AccelButton
 @onready var _hud_back_btn: Button = $HUD/TopBar/BackButton
 
@@ -120,6 +121,7 @@ func _ready() -> void:
 	_setup_interior()
 	_setup_crew()
 	_setup_interaction_points()
+	_setup_carriage_dividers()
 	_target_pos = _crew[0]["sprite"].global_position if not _crew.is_empty() else Vector2(400, 520)
 
 	# ===== 2.3：接入列车系统 =====
@@ -282,6 +284,23 @@ func _setup_interaction_points() -> void:
 		label.position = Vector2(-30, -52)
 		label.add_theme_font_size_override("font_size", 13)
 		point.add_child(label)
+
+
+## 编组数据影响车内展示：每节车厢之间画一道隔断，并在 HUD 显示编组构成（2.6）
+func _setup_carriage_dividers() -> void:
+	var carriages: Array = GameState.train.get("carriages", [])
+	if carriages.size() <= 1:
+		return
+	var view_w: float = get_viewport().get_visible_rect().size.x
+	for i in range(1, carriages.size()):
+		var x: float = view_w * float(i) / carriages.size()
+		var poly := Polygon2D.new()
+		poly.polygon = PackedVector2Array([
+			Vector2(x - 3, 400), Vector2(x + 3, 400),
+			Vector2(x + 3, 620), Vector2(x - 3, 620),
+		])
+		poly.color = Color(0.12, 0.09, 0.06, 0.75)
+		_interior_root.add_child(poly)
 
 
 func _show_action_popup(id: String) -> void:
@@ -459,9 +478,24 @@ func _update_hud() -> void:
 		mode_names.get(GameState.train_control_mode, "?"), next_station]
 	if _action_log != "":
 		_hud_status.text += "\n" + _action_log
+	_hud_carriage.text = _carriage_composition_text()
 	_hud_accel_btn.text = "制动/滑行" if GameState.train_control_mode == 1 else "加速"
 	_update_resource_bars()
 	_update_character_rows()
+
+
+func _carriage_composition_text() -> String:
+	var type_names: Dictionary = {
+		"locomotive": "机车", "coal_tender": "煤水车", "passenger": "客车",
+		"open_car": "敞车", "tank_car": "罐车", "service_car": "勤务", "combat_car": "战斗",
+	}
+	var carriages: Array = GameState.train.get("carriages", [])
+	if carriages.is_empty():
+		return "编组: 无（请先到编组界面配置列车）"
+	var names: Array = []
+	for c in carriages:
+		names.append(str(type_names.get(str(c.get("type", "?")), "?")))
+	return "编组(%d节): %s" % [carriages.size(), " ".join(names)]
 
 
 func _next_station_text() -> String:

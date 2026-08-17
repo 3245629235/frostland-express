@@ -79,7 +79,7 @@ func _on_board_button_pressed() -> void:
 		_show_popup("请先编组", "请先前往编组界面配置列车后再登车。")
 		return
 	GameState.save_state()
-	get_tree().change_scene_to_file("res://scenes/survival.tscn")
+	get_tree().change_scene_to_file("res://scenes/travel.tscn")
 
 func _on_team_select_button_pressed() -> void:
 	GameState.save_state()

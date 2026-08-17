@@ -32,6 +32,10 @@ custom_minimum_size = Vector2(400, 44)
 text = "速度 -- km/h"
 vertical_alignment = 1
 
+[node name="CarriageLabel" type="Label" parent="HUD/TopBar"]
+custom_minimum_size = Vector2(400, 20)
+text = "编组: --"
+
 [node name="AccelButton" type="Button" parent="HUD/TopBar"]
 custom_minimum_size = Vector2(200, 44)
 layout_mode = 0

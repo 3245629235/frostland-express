@@ -18,6 +18,7 @@
 - **现象**：survival.tscn（2774B，7/21）只有 SpeedLabel/ModeLabel/BtnAccel/BtnBrake/BtnBack，而 survival.gd（16KB，8/4）含角色面板/资源条/收集/维修逻辑；运行无报错（疑似 get_node_or_null 或动态构建），但 UI 展示层明显缺失。
 - **影响**：旧生存玩法展示层残缺。
 - **处理**：Day 2 以 travel.tscn（车内第一人称）取代 survival 展示层，survival.gd 数值逻辑移植后归档。
+- **状态**：✅ 已处理（2026-08-17 Day 2.2~2.6）——travel.tscn 已建成并接线系统/交互/HUD，main 的「出发」已改指 travel.tscn；survival.tscn 保留作旧展示层参考。
 
 ### BUG-003 【低】project.godot 与多个 .gd/.tscn 文件残留 BOM 乱码
 - **现象**：project.godot 首行 `"ï»¿config_version"=5`（BOM 被存为字面文本）；15 个 .gd/.tscn 文件头有 UTF-8 BOM。
