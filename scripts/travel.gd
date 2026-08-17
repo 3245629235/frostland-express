@@ -112,9 +112,7 @@ var _train_inertia: float = 0.0
 var _prev_train_scroll: float = 0.0
 
 # ===== 小队状态 =====
-var _crew: Array = []          # [{id, name, sprite, formation_offset}]
-var _target_pos: Vector2 = Vector2.ZERO
-var _is_moving: bool = false
+var _crew: Array = []          # [{id, name, sprite, formation_offset, target, is_moving}]
 var _floor_y_min: float = 430.0
 var _floor_y_max: float = 640.0
 var _selected_crew_index: int = -1
@@ -138,6 +136,7 @@ var _char_panel: Control = null
 
 # ===== 交互点弹窗 =====
 var _pending_interaction: String = ""
+var _pending_crew_index: int = -1  # 触发交互的成员下标；-1=整队到达后弹
 var _action_popup: PanelContainer = null
 var _action_title: Label = null
 var _action_button: Button = null
@@ -186,7 +185,6 @@ func _ready() -> void:
 	_setup_carriage_strips()
 	_setup_crew()
 	_setup_interaction_points()
-	_target_pos = _crew[0]["sprite"].global_position if not _crew.is_empty() else Vector2(640, 520)
 
 	_hud_accel_btn.pressed.connect(_on_accel_button_pressed)
 	_hud_brake_btn.pressed.connect(_on_brake_button_pressed)
@@ -296,6 +294,8 @@ func _setup_crew() -> void:
 			"name": def.get("name", id),
 			"sprite": s,
 			"formation_offset": CREW_FORMATION[i],
+			"target": Vector2.ZERO,
+			"is_moving": false,
 		})
 
 	# 选中指示器（黄色三角，显示在当前选中角色头顶）
@@ -522,24 +522,54 @@ func _handle_drag_motion(mouse_x: float) -> void:
 
 func _command_move(point: Vector2) -> void:
 	_pending_interaction = ""
+	_pending_crew_index = -1
 	_hide_action_popup()
 
-	# 点选/取消选中角色：点击某个小人（40px 内）只切换选择，不移动
+	# 点选/取消选中角色：点击某个小人（40px 内）只切换选择，不移动、不打断其他人当前移动
+	var best_i: int = -1
+	var best_d: float = 40.0
 	for i in range(_crew.size()):
-		if point.distance_to(_crew[i]["sprite"].position) <= 40.0:
-			_selected_crew_index = i if _selected_crew_index != i else -1
-			_update_selection_indicator()
-			return
+		var d: float = point.distance_to(_crew[i]["sprite"].position)
+		if d < best_d:
+			best_d = d
+			best_i = i
+	if best_i >= 0:
+		_selected_crew_index = best_i if _selected_crew_index != best_i else -1
+		_update_selection_indicator()
+		return
 
 	# 点击交互点附近 → 记住目标交互点，到达后弹操作按钮
+	var hit_id: String = ""
 	for entry in _interaction_points:
 		var cfg: Dictionary = entry["cfg"]
 		if point.distance_to(_interaction_screen_pos(cfg)) <= INTERACTION_RADIUS:
-			_pending_interaction = cfg["id"]
+			hit_id = cfg["id"]
 			break
-	# 小人只能在列车内部可通行区行走（x 吸附到最近可通行段，y 固定地板线）
-	_target_pos = _clamp_to_train(point)
-	_is_moving = true
+
+	var target: Vector2 = _clamp_to_train(point)
+
+	if _selected_crew_index >= 0 and _selected_crew_index < _crew.size():
+		# 只给当前选中的角色下达独立目标（其他人继续各自移动）
+		var member: Dictionary = _crew[_selected_crew_index]
+		member["target"] = target
+		member["is_moving"] = true
+		if hit_id != "":
+			_pending_interaction = hit_id
+			_pending_crew_index = _selected_crew_index
+	else:
+		# 未选中：整队移动到目标（编队）
+		for i in range(_crew.size()):
+			var m: Dictionary = _crew[i]
+			var ft: Vector2 = Vector2(
+				target.x + m["formation_offset"].x,
+				target.y + m["formation_offset"].y,
+			)
+			ft.x = _nearest_walkable_x(ft.x)
+			m["target"] = ft
+			m["is_moving"] = true
+		if hit_id != "":
+			_pending_interaction = hit_id
+			_pending_crew_index = -1
 
 
 ## 把目标点钳制到列车内部可通行区：x 在「列车内容 ∩ 屏幕可见（局部）」内再吸附到最近可通行段，y 固定地板线
@@ -591,7 +621,7 @@ func _process(delta: float) -> void:
 	if abs(drag_delta) > 0.001:
 		for member in _crew:
 			(member["sprite"] as Sprite2D).position.x += drag_delta
-		_target_pos.x += drag_delta
+			member["target"].x += drag_delta
 		_update_selection_indicator()
 
 	# 4. 抛锚检测 + 收集进度 + HUD
@@ -602,50 +632,40 @@ func _process(delta: float) -> void:
 			_complete_collection()
 	_update_hud()
 
-	# 5. 编队移动 / 单角色移动
-	if not _is_moving:
-		_update_selection_indicator()
-		return
-
-	if _selected_crew_index >= 0 and _selected_crew_index < _crew.size():
-		# 已选中角色：只移动这一个
-		var member: Dictionary = _crew[_selected_crew_index]
+	# 5. 每个小人独立移动（各自目标互不干扰；A 移动时点选 B 不会打断 A）
+	for i in range(_crew.size()):
+		var member: Dictionary = _crew[i]
+		if not member["is_moving"]:
+			continue
 		var sprite: Sprite2D = member["sprite"]
-		var target: Vector2 = _target_pos
+		var target: Vector2 = member["target"]
 		var pos: Vector2 = sprite.global_position
 		var dist: float = pos.distance_to(target)
 		if dist < 4.0:
 			sprite.global_position = target
-			_is_moving = false
-			if _pending_interaction != "":
+			member["is_moving"] = false
+			if _pending_crew_index == i and _pending_interaction != "":
 				_show_action_popup(_pending_interaction)
+				_pending_interaction = ""
+				_pending_crew_index = -1
 		else:
 			var dir: Vector2 = (target - pos).normalized()
 			sprite.flip_h = dir.x < 0
 			sprite.global_position = pos.move_toward(target, walk_speed * delta)
-		_update_selection_indicator()
-		return
 
-	var all_arrived := true
-	for member in _crew:
-		var sprite: Sprite2D = member["sprite"]
-		var target: Vector2 = _target_pos + member["formation_offset"]
-		# 每个成员的目标都吸附到最近可通行点，避免队形偏移把小队友带进锅炉等禁区
-		target.x = _nearest_walkable_x(target.x)
-		var pos: Vector2 = sprite.global_position
-		var dist: float = pos.distance_to(target)
-		if dist < 4.0:
-			sprite.global_position = target
-			continue
-		all_arrived = false
-		var dir: Vector2 = (target - pos).normalized()
-		sprite.flip_h = dir.x < 0
-		sprite.global_position = pos.move_toward(target, walk_speed * delta)
-
-	if all_arrived:
-		_is_moving = false
-		if _pending_interaction != "":
+	# 整队模式（无选中）的交互：所有人到齐后弹窗
+	if _pending_crew_index == -1 and _pending_interaction != "":
+		var all_done := true
+		for m in _crew:
+			if m["is_moving"]:
+				all_done = false
+				break
+		if all_done:
 			_show_action_popup(_pending_interaction)
+			_pending_interaction = ""
+			_pending_crew_index = -1
+
+	_update_selection_indicator()
 
 
 # ===== 列车展示（survival 原版：车厢精灵渲染 + 裁剪 + 拖拽）=====
