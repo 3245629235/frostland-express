@@ -35,6 +35,7 @@ const DRAG_THRESHOLD: float = 3.0
 const ZOOM_MIN: float = 1.0
 const ZOOM_MAX: float = 1.8
 const ZOOM_STEP: float = 0.1
+const ZOOM_ANIM_SPEED: float = 8.0
 
 ## 站点门槛（DEMO_DESIGN §3）
 const STATIONS: Array = [
@@ -99,6 +100,7 @@ var _layers: Array = []                 # [{container, tile_w, speed}]
 var _view_w: float = 1280.0
 var _view_h: float = 720.0
 var _zoom: float = 1.0
+var _target_zoom: float = 1.0
 var _train_scroll: float = 0.0
 var _train_total_w: float = 0.0
 var _train_vehicle_sizes: Array = []   # [{type, w, tex, flipped}]
@@ -285,7 +287,11 @@ func _setup_crew() -> void:
 		s.material = chroma
 		var tex_scale: float = crew_target_height / tex.get_height()
 		s.scale = Vector2(tex_scale, tex_scale)
-		s.position = base + CREW_FORMATION[i]
+		var spawn: Vector2 = base + CREW_FORMATION[i]
+		# 跨场景保留上次登车位置，避免返回后重新聚成一堆
+		if GameState.crew_positions.has(id) and GameState.crew_positions[id] is Vector2:
+			spawn = GameState.crew_positions[id]
+		s.position = spawn
 		s.z_index = 10
 		_crew_root.add_child(s)
 		var def := CharacterData.find_by_id(id)
@@ -294,7 +300,7 @@ func _setup_crew() -> void:
 			"name": def.get("name", id),
 			"sprite": s,
 			"formation_offset": CREW_FORMATION[i],
-			"target": Vector2.ZERO,
+			"target": spawn,
 			"is_moving": false,
 		})
 
@@ -589,6 +595,13 @@ func _clamp_to_train(p: Vector2) -> Vector2:
 
 # ===== 主循环 =====
 func _process(delta: float) -> void:
+	# 0. 缩放非线性动画（平滑趋近目标缩放）
+	if absf(_target_zoom - _zoom) > 0.001:
+		_zoom = lerp(_zoom, _target_zoom, 1.0 - exp(-ZOOM_ANIM_SPEED * delta))
+		if absf(_target_zoom - _zoom) < 0.001:
+			_zoom = _target_zoom
+		_apply_zoom()
+
 	# 1. 世界推进
 	var crew_count: int = _crew.size() if not _crew.is_empty() else (GameState.characters.size() if GameState.characters != null else 0)
 	GameState.tick_world(delta, crew_count)
@@ -651,7 +664,7 @@ func _process(delta: float) -> void:
 		else:
 			var dir: Vector2 = (target - pos).normalized()
 			sprite.flip_h = dir.x < 0
-			sprite.global_position = pos.move_toward(target, walk_speed * delta)
+			sprite.global_position = _move_toward_eased(pos, target, delta)
 
 	# 整队模式（无选中）的交互：所有人到齐后弹窗
 	if _pending_crew_index == -1 and _pending_interaction != "":
@@ -666,6 +679,18 @@ func _process(delta: float) -> void:
 			_pending_crew_index = -1
 
 	_update_selection_indicator()
+
+
+## 非线性移动：接近目标时按剩余距离减速（缓出）
+func _move_toward_eased(pos: Vector2, target: Vector2, delta: float) -> Vector2:
+	var dist: float = pos.distance_to(target)
+	if dist <= 0.01:
+		return target
+	var factor: float = clampf(dist / 120.0, 0.15, 1.0)
+	var step: float = walk_speed * factor * delta
+	if step >= dist:
+		return target
+	return pos + (target - pos).normalized() * step
 
 
 # ===== 列车展示（survival 原版：车厢精灵渲染 + 裁剪 + 拖拽）=====
@@ -701,18 +726,15 @@ func _local_visible_max_x() -> float:
 
 
 func _on_zoom_in_pressed() -> void:
-	_zoom = clampf(_zoom + ZOOM_STEP, ZOOM_MIN, ZOOM_MAX)
-	_apply_zoom()
+	_target_zoom = clampf(_target_zoom + ZOOM_STEP, ZOOM_MIN, ZOOM_MAX)
 
 
 func _on_zoom_out_pressed() -> void:
-	_zoom = clampf(_zoom - ZOOM_STEP, ZOOM_MIN, ZOOM_MAX)
-	_apply_zoom()
+	_target_zoom = clampf(_target_zoom - ZOOM_STEP, ZOOM_MIN, ZOOM_MAX)
 
 
 func _on_zoom_reset_pressed() -> void:
-	_zoom = 1.0
-	_apply_zoom()
+	_target_zoom = 1.0
 
 
 func _render_train() -> void:
@@ -1020,9 +1042,21 @@ func _on_brake_button_pressed() -> void:
 
 
 func _on_back_button_pressed() -> void:
+	_save_crew_positions()
 	GameState.is_traveling = false
 	GameState.save_state()
 	get_tree().change_scene_to_file("res://scenes/main.tscn")
+
+
+func _save_crew_positions() -> void:
+	GameState.crew_positions.clear()
+	for member in _crew:
+		GameState.crew_positions[member["id"]] = member["sprite"].position
+
+
+func _exit_tree() -> void:
+	_save_crew_positions()
+	GameState.save_state()
 
 
 # ===== 2.4 收集 / 维修 / 加煤 =====

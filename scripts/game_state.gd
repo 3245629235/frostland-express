@@ -42,6 +42,7 @@ var travel_time: float = 0.0
 var world_consume_time: float = 0.0
 var current_node: String = "station_start"
 var breakdown_count: int = 0  # 燃料耗尽抛锚次数（3 次 → 生存模式失败）
+var crew_positions: Dictionary = {}  # 角色 id -> Vector2，跨场景保留登车位置
 
 # 0=滑行(仅风阻), 1=加速(满出力), 2=刹车
 var train_control_mode: int = 0
@@ -78,6 +79,7 @@ func full_reset() -> void:
 	current_node = "station_start"
 	train_control_mode = 0
 	breakdown_count = 0
+	crew_positions = {}
 
 func reset_resources() -> void:
 	_reset_resources()
@@ -250,6 +252,22 @@ func get_tender_fuel_levels() -> Array:
 
 
 # ===== 保存/加载 =====
+func _serialize_crew_positions() -> Dictionary:
+	var out := {}
+	for id in crew_positions:
+		var v: Vector2 = crew_positions[id]
+		out[id] = [v.x, v.y]
+	return out
+
+
+func _deserialize_crew_positions(data: Dictionary) -> void:
+	crew_positions = {}
+	for id in data:
+		var arr = data[id]
+		if arr is Array and arr.size() >= 2:
+			crew_positions[id] = Vector2(float(arr[0]), float(arr[1]))
+
+
 func save_state() -> void:
 	var save_data = {
 		"resources": resources,
@@ -261,6 +279,7 @@ func save_state() -> void:
 		"world_consume_time": world_consume_time,
 		"current_node": current_node,
 		"breakdown_count": breakdown_count,
+		"crew_positions": _serialize_crew_positions(),
 	}
 	var file = FileAccess.open("user://game_state.json", FileAccess.WRITE)
 	if file:
@@ -296,6 +315,8 @@ func load_state() -> bool:
 		current_node = data["current_node"]
 	if data.has("breakdown_count"):
 		breakdown_count = int(data["breakdown_count"])
+	if data.has("crew_positions"):
+		_deserialize_crew_positions(data["crew_positions"])
 	refresh_train_runtime_state()
 	return true
 
