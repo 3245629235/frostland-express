@@ -29,6 +29,14 @@ const RESOURCE_NAMES := {
 	"parts": "零件", "ammo_small": "小弹药", "ammo_large": "大弹药",
 }
 
+## 车厢内交互点（2.5）：位置 + 颜色 + 动作
+const INTERACTION_POINTS: Array = [
+	{"id": "boiler", "name": "锅炉", "pos": Vector2(290, 545), "color": Color(0.85, 0.35, 0.2), "action": "加煤"},
+	{"id": "cargo", "name": "物资箱", "pos": Vector2(640, 565), "color": Color(0.55, 0.4, 0.25), "action": "收集物资"},
+	{"id": "repair", "name": "维修台", "pos": Vector2(990, 545), "color": Color(0.45, 0.5, 0.55), "action": "维修"},
+]
+const INTERACTION_RADIUS: float = 50.0
+
 # ===== 随车角色行走图映射（默认前 4 人）=====
 const CREW_WALK_TEXTURES = {
 	"conductor": "res://assets/sprites/characters_walk/conductor.png",
@@ -91,8 +99,15 @@ var _char_rows: Array = []             # [{id, hp_bar, status_label}]
 var _res_panel: Control = null
 var _char_panel: Control = null
 
+# ===== 交互点（2.5）=====
+var _pending_interaction: String = ""  # 到达后要弹出的交互点 id
+var _action_popup: PanelContainer = null
+var _action_title: Label = null
+var _action_button: Button = null
+
 @onready var _bg_root: Node2D = $BackgroundRoot
 @onready var _interior_root: Node2D = $InteriorRoot
+@onready var _interaction_root: Node2D = $InteractionRoot
 @onready var _crew_root: Node2D = $CrewRoot
 @onready var _hud_status: Label = $HUD/TopBar/StatusLabel
 @onready var _hud_accel_btn: Button = $HUD/TopBar/AccelButton
@@ -104,6 +119,7 @@ func _ready() -> void:
 	_setup_parallax()
 	_setup_interior()
 	_setup_crew()
+	_setup_interaction_points()
 	_target_pos = _crew[0]["sprite"].global_position if not _crew.is_empty() else Vector2(400, 520)
 
 	# ===== 2.3：接入列车系统 =====
@@ -246,6 +262,90 @@ func _make_chroma_key_material() -> ShaderMaterial:
 	return mat
 
 
+# ===== 2.5 交互点 =====
+func _setup_interaction_points() -> void:
+	for cfg in INTERACTION_POINTS:
+		var point := Node2D.new()
+		point.name = "Point_" + cfg["id"]
+		point.position = cfg["pos"]
+		_interaction_root.add_child(point)
+
+		var poly := Polygon2D.new()
+		poly.polygon = PackedVector2Array([
+			Vector2(0, -34), Vector2(34, 0), Vector2(0, 34), Vector2(-34, 0),
+		])
+		poly.color = cfg["color"]
+		point.add_child(poly)
+
+		var label := Label.new()
+		label.text = cfg["name"]
+		label.position = Vector2(-30, -52)
+		label.add_theme_font_size_override("font_size", 13)
+		point.add_child(label)
+
+
+func _show_action_popup(id: String) -> void:
+	var cfg: Dictionary = {}
+	for c in INTERACTION_POINTS:
+		if c["id"] == id:
+			cfg = c
+			break
+	if cfg.is_empty():
+		return
+
+	if _action_popup == null:
+		_action_popup = PanelContainer.new()
+		_action_popup.name = "ActionPopup"
+		var vbox := VBoxContainer.new()
+		vbox.add_theme_constant_override("separation", 6)
+		_action_popup.add_child(vbox)
+		_action_title = Label.new()
+		_action_title.add_theme_font_size_override("font_size", 14)
+		vbox.add_child(_action_title)
+		_action_button = Button.new()
+		_action_button.custom_minimum_size = Vector2(160, 44)
+		vbox.add_child(_action_button)
+		var close_btn := Button.new()
+		close_btn.text = "关闭"
+		close_btn.custom_minimum_size = Vector2(160, 40)
+		close_btn.pressed.connect(_hide_action_popup)
+		vbox.add_child(close_btn)
+		$HUD.add_child(_action_popup)
+
+	_action_title.text = cfg["name"]
+	_action_button.text = cfg["action"]
+	if _action_button.pressed.is_connected(_on_action_button_pressed):
+		_action_button.pressed.disconnect(_on_action_button_pressed)
+	_action_button.pressed.connect(_on_action_button_pressed.bind(id))
+	var popup_pos: Vector2 = cfg["pos"] + Vector2(-80, -150)
+	popup_pos.x = clampf(popup_pos.x, 12, 1180)
+	popup_pos.y = clampf(popup_pos.y, 12, 560)
+	_action_popup.position = popup_pos
+	_action_popup.visible = true
+
+
+func _hide_action_popup() -> void:
+	if _action_popup != null:
+		_action_popup.visible = false
+
+
+func _on_action_button_pressed(id: String) -> void:
+	# 体力 0 不可操作交互点（DEMO_DESIGN §2.3）
+	var leader_id: String = _crew[0]["id"] if not _crew.is_empty() else ""
+	var leader: Dictionary = _find_character_by_id(leader_id)
+	if not leader.is_empty() and float(leader.get("stamina", 0.0)) <= 0.0:
+		_action_log = "体力耗尽，无法操作交互点"
+		return
+	match id:
+		"boiler":
+			_do_refuel()
+		"cargo":
+			_start_collect()
+		"repair":
+			_do_repair()
+	_hide_action_popup()
+
+
 # ===== 输入：点击地面 → 编队移动 =====
 func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT and event.pressed:
@@ -255,6 +355,13 @@ func _unhandled_input(event: InputEvent) -> void:
 
 
 func _command_move(point: Vector2) -> void:
+	# 点击交互点附近 → 记住目标交互点，到达后弹操作按钮
+	_pending_interaction = ""
+	_hide_action_popup()
+	for cfg in INTERACTION_POINTS:
+		if point.distance_to(cfg["pos"]) <= INTERACTION_RADIUS:
+			_pending_interaction = cfg["id"]
+			break
 	var p := Vector2(
 		clampf(point.x, 40, get_viewport().get_visible_rect().size.x - 40),
 		clampf(point.y, floor_y_range.x, floor_y_range.y),
@@ -320,6 +427,8 @@ func _process(delta: float) -> void:
 
 	if all_arrived:
 		_is_moving = false
+		if _pending_interaction != "":
+			_show_action_popup(_pending_interaction)
 
 
 # ===== 2.3 行驶系统：抛锚 / HUD / 控制 =====

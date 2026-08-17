@@ -13,6 +13,9 @@ z_index = -10
 [node name="InteriorRoot" type="Node2D" parent="."]
 z_index = 5
 
+[node name="InteractionRoot" type="Node2D" parent="."]
+z_index = 9
+
 [node name="CrewRoot" type="Node2D" parent="."]
 z_index = 10
 
