@@ -59,9 +59,10 @@ mouse_filter = 2
 clip_contents = true
 z_index = 5
 
-; ---- 车厢内交互点（挂在列车容器内，随列车移动/裁剪）----
+; ---- 车厢内交互点（最上层绘制，随列车内容坐标移动，出屏隐藏）----
 
-[node name="InteractionRoot" type="Node2D" parent="TrainContainer"]
+[node name="InteractionRoot" type="Node2D" parent="."]
+z_index = 10
 
 ; ---- 随车小队 / HUD ----
 

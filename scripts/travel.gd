@@ -39,11 +39,11 @@ const RESOURCE_NAMES := {
 	"parts": "零件", "ammo_small": "小弹药", "ammo_large": "大弹药",
 }
 
-## 车厢内交互点（2.5）：train_x = 相对列车内容（车厢拼装）的 x，local_y = 相对 TrainContainer 的 y
+## 车厢内交互点（2.5）：train_x = 相对列车内容（车厢拼装）的 x，local_y = 相对车厢地板线的 y（全部站在地板上）
 const INTERACTION_POINTS: Array = [
-	{"id": "boiler", "name": "锅炉", "train_x": 380.0, "local_y": 190.0, "color": Color(0.85, 0.35, 0.2), "action": "加煤"},
-	{"id": "cargo", "name": "物资箱", "train_x": 1450.0, "local_y": 205.0, "color": Color(0.55, 0.4, 0.25), "action": "收集物资"},
-	{"id": "repair", "name": "维修台", "train_x": 1680.0, "local_y": 190.0, "color": Color(0.45, 0.5, 0.55), "action": "维修"},
+	{"id": "boiler", "name": "锅炉", "train_x": 380.0, "local_y": 233.0, "color": Color(0.85, 0.35, 0.2), "action": "加煤"},
+	{"id": "cargo", "name": "物资箱", "train_x": 1450.0, "local_y": 233.0, "color": Color(0.55, 0.4, 0.25), "action": "收集物资"},
+	{"id": "repair", "name": "维修台", "train_x": 1680.0, "local_y": 233.0, "color": Color(0.45, 0.5, 0.55), "action": "维修"},
 ]
 const INTERACTION_RADIUS: float = 50.0
 
@@ -56,6 +56,8 @@ const CREW_WALK_TEXTURES = {
 }
 const DEFAULT_CREW_IDS: Array = ["conductor", "laoge", "xiaowang", "xiaoliu"]
 const MAX_CREW: int = 4
+## 角色精灵中心相对脚线的高度（目标身高 180px 的一半）
+const CREW_HALF_HEIGHT: float = 90.0
 
 # 行走图是绿幕素材：用 shader 把绿色背景抠掉
 const CHROMA_KEY_SHADER := """
@@ -125,11 +127,12 @@ var _pending_interaction: String = ""
 var _action_popup: PanelContainer = null
 var _action_title: Label = null
 var _action_button: Button = null
-var _interaction_points: Array = []      # [{cfg, node}]，节点挂在 TrainContainer 内随列车移动
+var _interaction_points: Array = []      # [{cfg, node}]，节点在最上层绘制，随列车内容坐标移动
 var _train_band_top: float = 406.0
+var _carriage_strips: Array = []         # 地板/天花板装饰带 [{node, top, bottom}]
 
 @onready var _train_container: Control = $TrainContainer
-@onready var _interaction_root: Node2D = $TrainContainer/InteractionRoot
+@onready var _interaction_root: Node2D = $InteractionRoot
 @onready var _crew_root: Node2D = $CrewRoot
 @onready var _hud_status: Label = $HUD/TopBar/StatusLabel
 @onready var _hud_carriage: Label = $HUD/TopBar/CarriageLabel
@@ -161,6 +164,7 @@ func _ready() -> void:
 
 	# ===== 列车展示（先渲染：决定车厢区域与滚动基准）=====
 	_render_train()
+	_setup_carriage_strips()
 	_setup_crew()
 	_setup_interaction_points()
 	_target_pos = _crew[0]["sprite"].global_position if not _crew.is_empty() else Vector2(640, 520)
@@ -248,8 +252,7 @@ func _setup_crew() -> void:
 		if not ids.has(def_id):
 			ids.append(def_id)
 
-	var band: Dictionary = _train_band()
-	var base := Vector2(_view_w / 2.0, (band["top"] + band["bottom"]) / 2.0 - 30)
+	var base := Vector2(_view_w / 2.0, _floor_y_min - 90.0)  # 角色中心 = 地板线 - 半身高（180px 素材）
 	var chroma := _make_chroma_key_material()
 	for i in range(ids.size()):
 		var id: String = ids[i]
@@ -282,12 +285,42 @@ func _make_chroma_key_material() -> ShaderMaterial:
 	return mat
 
 
-# ===== 2.5 交互点（挂在 TrainContainer 内，坐标绑定列车内容）=====
+## 地板/天花板装饰层：车厢区上下两条带，中间保留雪原视差；随列车内容坐标滚动
+func _setup_carriage_strips() -> void:
+	var band: Dictionary = _train_band()
+	var defs := [
+		{"name": "CeilingStrip", "top": band["top"], "bottom": band["top"] + 18.0, "color": Color(0.10, 0.12, 0.16, 0.7)},
+		{"name": "FloorStrip", "top": band["bottom"] - 26.0, "bottom": band["bottom"], "color": Color(0.08, 0.07, 0.06, 0.8)},
+	]
+	for d in defs:
+		var poly := Polygon2D.new()
+		poly.name = d["name"]
+		poly.color = d["color"]
+		poly.z_index = 7
+		add_child(poly)
+		_carriage_strips.append({"node": poly, "top": d["top"], "bottom": d["bottom"]})
+
+
+func _sync_carriage_strips() -> void:
+	var x0: float = _train_scroll
+	var x1: float = _train_scroll + _train_total_w
+	for entry in _carriage_strips:
+		var node = entry["node"]
+		if not is_instance_valid(node):
+			continue
+		var top: float = entry["top"]
+		var bottom: float = entry["bottom"]
+		node.polygon = PackedVector2Array([
+			Vector2(x0, top), Vector2(x1, top), Vector2(x1, bottom), Vector2(x0, bottom),
+		])
+
+
+# ===== 2.5 交互点（最上层绘制，坐标绑定列车内容）=====
 func _setup_interaction_points() -> void:
 	for cfg in INTERACTION_POINTS:
 		var point := Node2D.new()
 		point.name = "Point_" + cfg["id"]
-		point.position = Vector2(_train_scroll + float(cfg["train_x"]), float(cfg["local_y"]))
+		point.position = _interaction_screen_pos(cfg)
 		_interaction_root.add_child(point)
 
 		var poly := Polygon2D.new()
@@ -311,14 +344,16 @@ func _interaction_screen_pos(cfg: Dictionary) -> Vector2:
 	return Vector2(_train_scroll + float(cfg["train_x"]), _train_band_top + float(cfg["local_y"]))
 
 
-## 每帧把交互点钉在列车内容坐标上（列车拖拽/惯性后位置同步）
+## 每帧把交互点钉在列车内容坐标上；滑出屏幕（列车可见区外）则隐藏
 func _sync_interaction_points() -> void:
 	for entry in _interaction_points:
 		var cfg: Dictionary = entry["cfg"]
 		var node = entry["node"]
 		if not is_instance_valid(node):
 			continue
-		node.position = Vector2(_train_scroll + float(cfg["train_x"]), float(cfg["local_y"]))
+		var pos: Vector2 = _interaction_screen_pos(cfg)
+		node.position = pos
+		node.visible = pos.x >= -40.0 and pos.x <= _view_w + 40.0
 
 
 func _show_action_popup(id: String) -> void:
@@ -445,7 +480,7 @@ func _command_move(point: Vector2) -> void:
 	_is_moving = true
 
 
-## 把目标点钳制到列车内部：x 在「列车内容 ∩ 屏幕可见」范围内，y 在车厢地板带
+## 把目标点钳制到列车内部：x 在「列车内容 ∩ 屏幕可见」范围，y 固定地板线（精灵中心 = 脚线 - 半身高）
 func _clamp_to_train(p: Vector2) -> Vector2:
 	var margin: float = 60.0
 	var min_x: float = maxf(_train_scroll + margin, 40.0)
@@ -455,7 +490,7 @@ func _clamp_to_train(p: Vector2) -> Vector2:
 		max_x = _view_w - 40.0
 	return Vector2(
 		clampf(p.x, min_x, max_x),
-		clampf(p.y, _floor_y_min, _floor_y_max),
+		_floor_y_min - CREW_HALF_HEIGHT,
 	)
 
 
@@ -487,8 +522,9 @@ func _process(delta: float) -> void:
 	for layer in _layers:
 		_scroll_layer(layer, scroll_delta, drag_delta)
 
-	# 交互点钉在列车内容坐标；小队跟随列车拖拽等量位移（不钳制——他们站在列车上，随车厢滑出屏幕是正确表现）
+	# 交互点/地板天花板钉在列车内容坐标；小队跟随列车拖拽等量位移（不钳制——他们站在列车上，随车厢滑出屏幕是正确表现）
 	_sync_interaction_points()
+	_sync_carriage_strips()
 	if abs(drag_delta) > 0.001:
 		for member in _crew:
 			(member["sprite"] as Sprite2D).position.x += drag_delta
@@ -549,8 +585,9 @@ func _render_train() -> void:
 	_train_container.offset_bottom = band["bottom"]
 	_train_container.mouse_filter = Control.MOUSE_FILTER_IGNORE
 
-	_floor_y_min = band["top"] + 20.0
-	_floor_y_max = band["bottom"] - 30.0
+	# 小人只能在地板线上水平行走（当前无梯子，禁止垂直移动）；脚线 = 地板条上沿
+	_floor_y_min = band["bottom"] - 26.0
+	_floor_y_max = _floor_y_min
 
 	var vehicle_sizes: Array = []
 	_train_total_w = 0.0
