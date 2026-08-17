@@ -39,11 +39,11 @@ const RESOURCE_NAMES := {
 	"parts": "零件", "ammo_small": "小弹药", "ammo_large": "大弹药",
 }
 
-## 车厢内交互点（2.5）：位于列车地板带上
+## 车厢内交互点（2.5）：train_x = 相对列车内容（车厢拼装）的 x，local_y = 相对 TrainContainer 的 y
 const INTERACTION_POINTS: Array = [
-	{"id": "boiler", "name": "锅炉", "pos": Vector2(300, 600), "color": Color(0.85, 0.35, 0.2), "action": "加煤"},
-	{"id": "cargo", "name": "物资箱", "pos": Vector2(640, 615), "color": Color(0.55, 0.4, 0.25), "action": "收集物资"},
-	{"id": "repair", "name": "维修台", "pos": Vector2(980, 600), "color": Color(0.45, 0.5, 0.55), "action": "维修"},
+	{"id": "boiler", "name": "锅炉", "train_x": 380.0, "local_y": 190.0, "color": Color(0.85, 0.35, 0.2), "action": "加煤"},
+	{"id": "cargo", "name": "物资箱", "train_x": 1450.0, "local_y": 205.0, "color": Color(0.55, 0.4, 0.25), "action": "收集物资"},
+	{"id": "repair", "name": "维修台", "train_x": 1680.0, "local_y": 190.0, "color": Color(0.45, 0.5, 0.55), "action": "维修"},
 ]
 const INTERACTION_RADIUS: float = 50.0
 
@@ -125,9 +125,11 @@ var _pending_interaction: String = ""
 var _action_popup: PanelContainer = null
 var _action_title: Label = null
 var _action_button: Button = null
+var _interaction_points: Array = []      # [{cfg, node}]，节点挂在 TrainContainer 内随列车移动
+var _train_band_top: float = 406.0
 
 @onready var _train_container: Control = $TrainContainer
-@onready var _interaction_root: Node2D = $InteractionRoot
+@onready var _interaction_root: Node2D = $TrainContainer/InteractionRoot
 @onready var _crew_root: Node2D = $CrewRoot
 @onready var _hud_status: Label = $HUD/TopBar/StatusLabel
 @onready var _hud_carriage: Label = $HUD/TopBar/CarriageLabel
@@ -142,9 +144,6 @@ func _ready() -> void:
 
 	_ensure_crew_state()
 	_setup_parallax()
-	_setup_crew()
-	_setup_interaction_points()
-	_target_pos = _crew[0]["sprite"].global_position if not _crew.is_empty() else Vector2(640, 520)
 
 	# ===== 2.3：接入列车系统 =====
 	GameState.refresh_train_runtime_state()
@@ -160,8 +159,11 @@ func _ready() -> void:
 	else:
 		GameState.train_control_mode = 0
 
-	# ===== 列车展示 =====
+	# ===== 列车展示（先渲染：决定车厢区域与滚动基准）=====
 	_render_train()
+	_setup_crew()
+	_setup_interaction_points()
+	_target_pos = _crew[0]["sprite"].global_position if not _crew.is_empty() else Vector2(640, 520)
 
 	_hud_accel_btn.pressed.connect(_on_accel_button_pressed)
 	_hud_brake_btn.pressed.connect(_on_brake_button_pressed)
@@ -280,12 +282,12 @@ func _make_chroma_key_material() -> ShaderMaterial:
 	return mat
 
 
-# ===== 2.5 交互点 =====
+# ===== 2.5 交互点（挂在 TrainContainer 内，坐标绑定列车内容）=====
 func _setup_interaction_points() -> void:
 	for cfg in INTERACTION_POINTS:
 		var point := Node2D.new()
 		point.name = "Point_" + cfg["id"]
-		point.position = cfg["pos"]
+		point.position = Vector2(_train_scroll + float(cfg["train_x"]), float(cfg["local_y"]))
 		_interaction_root.add_child(point)
 
 		var poly := Polygon2D.new()
@@ -300,6 +302,23 @@ func _setup_interaction_points() -> void:
 		label.position = Vector2(-30, -52)
 		label.add_theme_font_size_override("font_size", 13)
 		point.add_child(label)
+
+		_interaction_points.append({"cfg": cfg, "node": point})
+
+
+## 交互点在屏幕坐标系的位置（点击命中/弹窗定位用）
+func _interaction_screen_pos(cfg: Dictionary) -> Vector2:
+	return Vector2(_train_scroll + float(cfg["train_x"]), _train_band_top + float(cfg["local_y"]))
+
+
+## 每帧把交互点钉在列车内容坐标上（列车拖拽/惯性后位置同步）
+func _sync_interaction_points() -> void:
+	for entry in _interaction_points:
+		var cfg: Dictionary = entry["cfg"]
+		var node = entry["node"]
+		if not is_instance_valid(node):
+			continue
+		node.position = Vector2(_train_scroll + float(cfg["train_x"]), float(cfg["local_y"]))
 
 
 func _show_action_popup(id: String) -> void:
@@ -335,7 +354,7 @@ func _show_action_popup(id: String) -> void:
 	if _action_button.pressed.is_connected(_on_action_button_pressed):
 		_action_button.pressed.disconnect(_on_action_button_pressed)
 	_action_button.pressed.connect(_on_action_button_pressed.bind(id))
-	var popup_pos: Vector2 = cfg["pos"] + Vector2(-80, -150)
+	var popup_pos: Vector2 = _interaction_screen_pos(cfg) + Vector2(-80, -150)
 	popup_pos.x = clampf(popup_pos.x, 12, 1180)
 	popup_pos.y = clampf(popup_pos.y, 12, 560)
 	_action_popup.position = popup_pos
@@ -415,16 +434,29 @@ func _handle_drag_motion(mouse_x: float) -> void:
 func _command_move(point: Vector2) -> void:
 	_pending_interaction = ""
 	_hide_action_popup()
-	for cfg in INTERACTION_POINTS:
-		if point.distance_to(cfg["pos"]) <= INTERACTION_RADIUS:
+	# 点击交互点附近 → 记住目标交互点，到达后弹操作按钮
+	for entry in _interaction_points:
+		var cfg: Dictionary = entry["cfg"]
+		if point.distance_to(_interaction_screen_pos(cfg)) <= INTERACTION_RADIUS:
 			_pending_interaction = cfg["id"]
 			break
-	var p := Vector2(
-		clampf(point.x, 40, _view_w - 40),
-		clampf(point.y, _floor_y_min, _floor_y_max),
-	)
-	_target_pos = p
+	# 小人只能在列车内部行走（x/y 都钳制到车厢范围）
+	_target_pos = _clamp_to_train(point)
 	_is_moving = true
+
+
+## 把目标点钳制到列车内部：x 在「列车内容 ∩ 屏幕可见」范围内，y 在车厢地板带
+func _clamp_to_train(p: Vector2) -> Vector2:
+	var margin: float = 60.0
+	var min_x: float = maxf(_train_scroll + margin, 40.0)
+	var max_x: float = minf(_train_scroll + _train_total_w - margin, _view_w - 40.0)
+	if max_x < min_x:
+		min_x = 40.0
+		max_x = _view_w - 40.0
+	return Vector2(
+		clampf(p.x, min_x, max_x),
+		clampf(p.y, _floor_y_min, _floor_y_max),
+	)
 
 
 # ===== 主循环 =====
@@ -455,11 +487,16 @@ func _process(delta: float) -> void:
 	for layer in _layers:
 		_scroll_layer(layer, scroll_delta, drag_delta)
 
-	# 小队跟随列车拖拽同步移动
+	# 交互点钉在列车内容坐标；小队跟随列车拖拽同步移动并保持钳制在车厢内
+	_sync_interaction_points()
 	if abs(drag_delta) > 0.001:
 		for member in _crew:
 			(member["sprite"] as Sprite2D).position.x += drag_delta
 		_target_pos.x += drag_delta
+		for member in _crew:
+			var sp: Sprite2D = member["sprite"]
+			sp.position = _clamp_to_train(sp.position)
+		_target_pos = _clamp_to_train(_target_pos)
 
 	# 4. 抛锚检测 + 收集进度 + HUD
 	_check_breakdown()
@@ -508,6 +545,7 @@ func _render_train() -> void:
 
 	_train_container.visible = true
 	var band: Dictionary = _train_band()
+	_train_band_top = band["top"]
 	# Control 挂在 Node2D 下时锚点不会拉伸，必须显式设置四边，否则 clip 宽度为 0 会把车厢全部裁掉
 	_train_container.offset_left = 0.0
 	_train_container.offset_right = _view_w
@@ -542,8 +580,10 @@ func _render_train() -> void:
 
 
 func _apply_train_positions(vehicle_sizes: Array, train_height: float) -> void:
+	# 只清车厢精灵（TextureRect），保留 InteractionRoot 等挂载在列车容器内的节点
 	for child in _train_container.get_children():
-		child.queue_free()
+		if child is TextureRect:
+			child.queue_free()
 
 	var current_x: float = _train_scroll
 	for v in vehicle_sizes:

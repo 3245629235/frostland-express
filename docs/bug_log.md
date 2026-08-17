@@ -19,6 +19,7 @@
 - **追加修复（用户复测反馈 2026-08-17）**：
   1. **车厢图片仍不显示**：TrainContainer（Control）挂在 Node2D 下时锚点不拉伸，宽度算成 0，加上 clip_contents=true 把所有车厢精灵裁掉。修复：_render_train 显式设置 offset_left/right/top/bottom（0~1280）。MCP 验证：容器全局宽 1280，屏幕采样点与车厢贴图像素一致。
   2. **刹车太慢**：原 BRAKE_DECEL=15 m/s²，且登车界面没有独立刹车按钮（加速按钮只切加速/滑行）。修复：BRAKE_DECEL 提升为 60 m/s²（高速约 2 秒刹停），TopBar 加回「刹车/松开刹车」按钮（mode 2）。MCP 实测：103.8 m/s 点击刹车后 1.2 秒内降至 0。
+  3. **锅炉/物资箱/维修台浮空、小人能走出列车**：交互点原来是固定屏幕坐标，不与列车一起滚动；行走只钳制 y 不钳制 x。修复：交互点改为 TrainContainer 子节点，坐标绑定列车内容坐标（train_x/local_y），每帧同步 _train_scroll，随拖拽移动并被容器裁剪；点击行走目标钳制到「列车内容 ∩ 屏幕可见」范围。MCP 实测：拖拽后锅炉 -829/cargo 240/repair 470 随车移动；点 (1240,200) 目标被夹到 (580,426)。期间修复一个连带 bug：_apply_train_positions 清空子节点时误删 InteractionRoot（改为只清 TextureRect）。
 
 ## 2026-08-17（Day 1 冒烟）
 
