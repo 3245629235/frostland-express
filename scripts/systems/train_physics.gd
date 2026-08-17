@@ -27,6 +27,17 @@ static func update_physics(delta: float, train: Dictionary, mode: int = 0) -> vo
 	if speed == null:
 		speed = 0.0
 
+	# ---- 无动力机车（燃料耗尽/无煤水车）→ 视为抛锚，按制动减速停车 ----
+	var has_power := false
+	for c in carriages:
+		if c["type"] == "locomotive" and c.get("is_powered", false):
+			has_power = true
+			break
+	if mode == 1 and not has_power:
+		speed = maxf(speed - GameConfig.BRAKE_DECEL * delta, 0.0)
+		train["speed"] = speed
+		return
+
 	# ---- 刹车模式 ----
 	if mode == 2 and speed > 0.0:
 		speed -= GameConfig.BRAKE_DECEL * delta
@@ -63,4 +74,6 @@ static func update_physics(delta: float, train: Dictionary, mode: int = 0) -> vo
 
 	if speed < 0:
 		speed = 0.0
+	# DEMO_DESIGN §2.2：速度上限 120 km/h
+	speed = minf(speed, GameConfig.MAX_SPEED_MS)
 	train["speed"] = speed

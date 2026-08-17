@@ -15,3 +15,26 @@ z_index = 5
 
 [node name="CrewRoot" type="Node2D" parent="."]
 z_index = 10
+
+[node name="HUD" type="CanvasLayer" parent="."]
+
+[node name="TopBar" type="VBoxContainer" parent="HUD"]
+offset_left = 12.0
+offset_top = 12.0
+offset_right = 420.0
+offset_bottom = 160.0
+
+[node name="StatusLabel" type="Label" parent="HUD/TopBar"]
+custom_minimum_size = Vector2(400, 44)
+text = "速度 -- km/h"
+vertical_alignment = 1
+
+[node name="AccelButton" type="Button" parent="HUD/TopBar"]
+custom_minimum_size = Vector2(200, 44)
+layout_mode = 0
+text = "加速"
+
+[node name="BackButton" type="Button" parent="HUD/TopBar"]
+custom_minimum_size = Vector2(200, 44)
+layout_mode = 0
+text = "返回主界面"

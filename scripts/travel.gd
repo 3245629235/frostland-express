@@ -12,6 +12,9 @@ const PARALLAX_LAYERS = [
 	{ "path": "res://assets/sprites/parallax/最前景枯树.png", "speed": 1.40 },
 ]
 
+## 视差滚动系数：滚动速度 = 列车速度(m/s) × 此系数
+const SCROLL_SPEED_FACTOR: float = 80.0
+
 # ===== 随车角色行走图映射（默认前 4 人）=====
 const CREW_WALK_TEXTURES = {
 	"conductor": "res://assets/sprites/characters_walk/conductor.png",
@@ -58,9 +61,17 @@ var _crew: Array = []          # [{id, name, sprite, formation_offset}]
 var _target_pos: Vector2 = Vector2.ZERO
 var _is_moving: bool = false
 
+# ===== 行驶状态（2.3 接入 systems/）=====
+var _distance_km: float = 0.0          # 本程累计里程
+var _travel_time: float = 0.0          # 本程累计行驶时间
+var _breakdown_armed: bool = false     # 抛锚判定使能（有动力加速中才计数）
+
 @onready var _bg_root: Node2D = $BackgroundRoot
 @onready var _interior_root: Node2D = $InteriorRoot
 @onready var _crew_root: Node2D = $CrewRoot
+@onready var _hud_status: Label = $HUD/TopBar/StatusLabel
+@onready var _hud_accel_btn: Button = $HUD/TopBar/AccelButton
+@onready var _hud_back_btn: Button = $HUD/TopBar/BackButton
 
 
 func _ready() -> void:
@@ -68,6 +79,24 @@ func _ready() -> void:
 	_setup_interior()
 	_setup_crew()
 	_target_pos = _crew[0]["sprite"].global_position if not _crew.is_empty() else Vector2(400, 520)
+
+	# ===== 2.3：接入列车系统 =====
+	GameState.refresh_train_runtime_state()
+	GameState.is_traveling = true
+	GameState.travel_time = 0.0
+	_distance_km = 0.0
+	_travel_time = 0.0
+	if GameState.train.get("carriages", []).is_empty():
+		GameState.train_control_mode = 0
+	elif GameState.has_powered_locomotive():
+		GameState.train_control_mode = 1
+		_breakdown_armed = true
+	else:
+		GameState.train_control_mode = 0
+
+	_hud_accel_btn.pressed.connect(_on_accel_button_pressed)
+	_hud_back_btn.pressed.connect(_on_back_button_pressed)
+	_update_hud()
 
 
 # ===== 视差背景 =====
@@ -201,7 +230,20 @@ func _command_move(point: Vector2) -> void:
 
 # ===== 主循环 =====
 func _process(delta: float) -> void:
-	_scroll += train_visual_speed * delta
+	# 1. 世界推进：物理/食物/燃料系统（2.3）
+	var crew_count: int = GameState.characters.size() if GameState.characters != null else 0
+	GameState.tick_world(delta, crew_count)
+
+	var train_speed: float = GameState.get_train_speed()
+	_travel_time += delta
+	GameState.travel_time = _travel_time
+	_distance_km += train_speed * delta / 1000.0
+
+	# 2. 视差滚动由真实车速驱动（无编组时退回演示速度）
+	var scroll_speed: float = train_speed * SCROLL_SPEED_FACTOR
+	if GameState.train.get("carriages", []).is_empty():
+		scroll_speed = train_visual_speed
+	_scroll += scroll_speed * delta
 	for state in _layer_states:
 		var sprites: Array = state["sprites"]
 		var w: float = state["tex_w"]
@@ -214,6 +256,11 @@ func _process(delta: float) -> void:
 				x += w * sprites.size()
 			sprite.position.x = x
 
+	# 3. 抛锚检测 + HUD
+	_check_breakdown()
+	_update_hud()
+
+	# 4. 编队移动
 	if not _is_moving:
 		return
 
@@ -234,3 +281,50 @@ func _process(delta: float) -> void:
 
 	if all_arrived:
 		_is_moving = false
+
+
+# ===== 2.3 行驶系统：抛锚 / HUD / 控制 =====
+func _check_breakdown() -> void:
+	if not GameState.is_traveling:
+		return
+	var has_power: bool = GameState.has_powered_locomotive()
+	if has_power:
+		_breakdown_armed = true
+		return
+	# 失去动力且列车完全停下 → 记一次抛锚（生存模式 3 次失败）
+	if _breakdown_armed and GameState.get_train_speed() <= 0.05:
+		_breakdown_armed = false
+		GameState.breakdown_count += 1
+		GameState.train_control_mode = 0
+		GameState.save_state()
+		print("[DEBUG travel._check_breakdown] 燃料耗尽抛锚！breakdown_count=%d" % GameState.breakdown_count)
+
+
+func _update_hud() -> void:
+	var speed_kmh: int = int(GameState.get_train_speed() * 3.6)
+	var mode_names: Dictionary = {0: "滑行", 1: "加速", 2: "刹车"}
+	var fuel: int = GameState.get_resource("fuel")
+	var power: String = "有" if GameState.has_powered_locomotive() else "无"
+	_hud_status.text = "速度 %d km/h | 里程 %.1f km | 燃料 %d | 动力 %s | 抛锚 %d | %s" % [
+		speed_kmh, _distance_km, fuel, power, GameState.breakdown_count,
+		mode_names.get(GameState.train_control_mode, "?")]
+	_hud_accel_btn.text = "制动/滑行" if GameState.train_control_mode == 1 else "加速"
+
+
+func _on_accel_button_pressed() -> void:
+	if GameState.train_control_mode == 1:
+		GameState.train_control_mode = 0
+		return
+	GameState.refresh_train_runtime_state()
+	if not GameState.has_powered_locomotive():
+		print("[DEBUG travel._on_accel_button_pressed] 无动力机车：需要机车+煤水车+燃料")
+		_hud_status.text += "  ⚠无动力(需机车+煤水车+燃料)"
+		return
+	GameState.train_control_mode = 1
+	_breakdown_armed = true
+
+
+func _on_back_button_pressed() -> void:
+	GameState.is_traveling = false
+	GameState.save_state()
+	get_tree().change_scene_to_file("res://scenes/main.tscn")

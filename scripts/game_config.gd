@@ -15,4 +15,14 @@ const FOOD_PER_CHAR_PER_TICK: int = 1
 const AERO_FACTOR: float = 0.02
 ## 刹车减速度（m/s²）
 const BRAKE_DECEL: float = 15.0
+## 最高速度（DEMO_DESIGN §2.2: 0~120 km/h）
+const MAX_SPEED_MS: float = 120.0 / 3.6
+
+# ===== 燃料消耗（DEMO_DESIGN §2.2）=====
+## 基础燃料消耗（每 CONSUME_INTERVAL 2s，速度>0 时）
+const FUEL_BASE_PER_TICK: float = 3.0
+## 速度超过该值（km/h）时油耗加成
+const FUEL_SPEED_BONUS_KMH: float = 60.0
+## 油耗加成倍率（速度>60 km/h 时 +50%）
+const FUEL_SPEED_BONUS_MULT: float = 1.5
 

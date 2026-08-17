@@ -15,21 +15,29 @@ static func refuel_tenders(train: Dictionary, resources: Dictionary) -> void:
 				resources["fuel"] -= int(ceil(refill))
 
 ## 消耗燃料（由 tick_world 周期性调用）
-static func consume_train_fuel(interval: float, train: Dictionary) -> void:
+## fuel_amount：本周期总消耗（DEMO_DESIGN §2.2：基础 3/2s，速度>60km/h ×1.5），
+## 平均分摊给每台有动力机车，从其连挂的煤水车扣除；煤水车不足则该机车失去动力。
+static func consume_train_fuel(train: Dictionary, fuel_amount: float) -> void:
+	var powered_locos: Array = []
 	for i in range(train["carriages"].size()):
 		var c = train["carriages"][i]
-		if c["type"] != "locomotive" or not c.get("is_powered", false):
-			continue
-		var tender_idx = _find_coal_tender(i, c.get("flipped", false), train)
+		if c["type"] == "locomotive" and c.get("is_powered", false):
+			powered_locos.append(i)
+	if powered_locos.is_empty():
+		return
+
+	var per_loco: float = fuel_amount / powered_locos.size()
+	for loco_idx in powered_locos:
+		var c = train["carriages"][loco_idx]
+		var tender_idx = _find_coal_tender(loco_idx, c.get("flipped", false), train)
 		if tender_idx < 0:
 			c["is_powered"] = false
 			continue
 		var tender = train["carriages"][tender_idx]
-		var consume = VehicleTypes.CONFIG[VehicleTypes.STR_TYPE["locomotive"]]["fuel_consume"] * interval
-		if tender["fuel_left"] >= consume:
-			tender["fuel_left"] -= consume
+		if tender["fuel_left"] >= per_loco:
+			tender["fuel_left"] -= per_loco
 		else:
-			tender["fuel_left"] = 0
+			tender["fuel_left"] = 0.0
 			c["is_powered"] = false
 
 ## 刷新所有机车的动力状态

@@ -41,6 +41,7 @@ var is_traveling: bool = false
 var travel_time: float = 0.0
 var world_consume_time: float = 0.0
 var current_node: String = "station_start"
+var breakdown_count: int = 0  # 燃料耗尽抛锚次数（3 次 → 生存模式失败）
 
 # 0=滑行(仅风阻), 1=加速(满出力), 2=刹车
 var train_control_mode: int = 0
@@ -76,6 +77,7 @@ func full_reset() -> void:
 	world_consume_time = 0.0
 	current_node = "station_start"
 	train_control_mode = 0
+	breakdown_count = 0
 
 func reset_resources() -> void:
 	_reset_resources()
@@ -154,7 +156,7 @@ func stop_travel() -> void:
 
 # ===== 世界推进（每帧）=====
 func tick_world(delta: float, crew_count: int = 0) -> Dictionary:
-	var result = WorldTick.tick_world(delta, crew_count, world_consume_time, train, resources, train_control_mode)
+	var result = WorldTick.tick_world(delta, crew_count, world_consume_time, train, resources, train_control_mode, is_traveling)
 	world_consume_time = result["world_consume_time"]
 	return result
 
@@ -215,6 +217,7 @@ func save_state() -> void:
 		"travel_time": travel_time,
 		"world_consume_time": world_consume_time,
 		"current_node": current_node,
+		"breakdown_count": breakdown_count,
 	}
 	var file = FileAccess.open("user://game_state.json", FileAccess.WRITE)
 	if file:
@@ -248,6 +251,8 @@ func load_state() -> bool:
 		world_consume_time = float(data["world_consume_time"])
 	if data.has("current_node"):
 		current_node = data["current_node"]
+	if data.has("breakdown_count"):
+		breakdown_count = int(data["breakdown_count"])
 	refresh_train_runtime_state()
 	return true
 
