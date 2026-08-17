@@ -9,3 +9,7 @@ build/
 # 系统文件
 Thumbs.db
 Desktop.ini
+
+# Python 测试工具缓存
+__pycache__/
+*.pyc
