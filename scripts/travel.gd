@@ -48,7 +48,7 @@ const RESOURCE_NAMES := {
 
 ## 车厢内交互点（2.5）：train_x = 相对列车内容（车厢拼装）的 x，local_y = 相对车厢地板线的 y（全部站在地板上）
 const INTERACTION_POINTS: Array = [
-	{"id": "boiler", "name": "锅炉", "train_x": 380.0, "local_y": 163.0, "color": Color(0.85, 0.35, 0.2), "action": "加煤"},
+	{"id": "boiler", "name": "锅炉", "train_x": 950.0, "local_y": 163.0, "color": Color(0.85, 0.35, 0.2), "action": "加煤"},
 	{"id": "cargo", "name": "物资箱", "train_x": 1450.0, "local_y": 163.0, "color": Color(0.55, 0.4, 0.25), "action": "收集物资"},
 	{"id": "repair", "name": "维修台", "train_x": 1680.0, "local_y": 163.0, "color": Color(0.45, 0.5, 0.55), "action": "维修"},
 ]
@@ -112,6 +112,8 @@ var _target_pos: Vector2 = Vector2.ZERO
 var _is_moving: bool = false
 var _floor_y_min: float = 430.0
 var _floor_y_max: float = 640.0
+var _selected_crew_index: int = -1
+var _selection_indicator: Polygon2D = null
 
 # ===== 行驶状态（2.3）=====
 var _distance_km: float = 0.0
@@ -282,6 +284,27 @@ func _setup_crew() -> void:
 			"sprite": s,
 			"formation_offset": CREW_FORMATION[i],
 		})
+
+	# 选中指示器（黄色三角，显示在当前选中角色头顶）
+	_selection_indicator = Polygon2D.new()
+	_selection_indicator.name = "SelectionIndicator"
+	_selection_indicator.polygon = PackedVector2Array([
+		Vector2(0, -52), Vector2(18, -28), Vector2(-18, -28),
+	])
+	_selection_indicator.color = Color(1, 0.85, 0.2, 0.95)
+	_selection_indicator.z_index = 12
+	_selection_indicator.visible = false
+	_crew_root.add_child(_selection_indicator)
+
+
+func _update_selection_indicator() -> void:
+	if _selected_crew_index >= 0 and _selected_crew_index < _crew.size() and is_instance_valid(_selection_indicator):
+		var sp: Sprite2D = _crew[_selected_crew_index]["sprite"]
+		_selection_indicator.position = sp.position + Vector2(0, -crew_target_height * 0.5 - 6)
+		_selection_indicator.visible = true
+	else:
+		if is_instance_valid(_selection_indicator):
+			_selection_indicator.visible = false
 
 
 func _make_chroma_key_material() -> ShaderMaterial:
@@ -476,13 +499,21 @@ func _handle_drag_motion(mouse_x: float) -> void:
 func _command_move(point: Vector2) -> void:
 	_pending_interaction = ""
 	_hide_action_popup()
+
+	# 点选/取消选中角色：点击某个小人（40px 内）只切换选择，不移动
+	for i in range(_crew.size()):
+		if point.distance_to(_crew[i]["sprite"].position) <= 40.0:
+			_selected_crew_index = i if _selected_crew_index != i else -1
+			_update_selection_indicator()
+			return
+
 	# 点击交互点附近 → 记住目标交互点，到达后弹操作按钮
 	for entry in _interaction_points:
 		var cfg: Dictionary = entry["cfg"]
 		if point.distance_to(_interaction_screen_pos(cfg)) <= INTERACTION_RADIUS:
 			_pending_interaction = cfg["id"]
 			break
-	# 小人只能在列车内部行走（x/y 都钳制到车厢范围）
+	# 小人只能在列车内部可通行区行走（x 吸附到最近可通行段，y 固定地板线）
 	_target_pos = _clamp_to_train(point)
 	_is_moving = true
 
@@ -537,6 +568,7 @@ func _process(delta: float) -> void:
 		for member in _crew:
 			(member["sprite"] as Sprite2D).position.x += drag_delta
 		_target_pos.x += drag_delta
+		_update_selection_indicator()
 
 	# 4. 抛锚检测 + 收集进度 + HUD
 	_check_breakdown()
@@ -546,8 +578,28 @@ func _process(delta: float) -> void:
 			_complete_collection()
 	_update_hud()
 
-	# 5. 编队移动
+	# 5. 编队移动 / 单角色移动
 	if not _is_moving:
+		_update_selection_indicator()
+		return
+
+	if _selected_crew_index >= 0 and _selected_crew_index < _crew.size():
+		# 已选中角色：只移动这一个
+		var member: Dictionary = _crew[_selected_crew_index]
+		var sprite: Sprite2D = member["sprite"]
+		var target: Vector2 = _target_pos
+		var pos: Vector2 = sprite.global_position
+		var dist: float = pos.distance_to(target)
+		if dist < 4.0:
+			sprite.global_position = target
+			_is_moving = false
+			if _pending_interaction != "":
+				_show_action_popup(_pending_interaction)
+		else:
+			var dir: Vector2 = (target - pos).normalized()
+			sprite.flip_h = dir.x < 0
+			sprite.global_position = pos.move_toward(target, walk_speed * delta)
+		_update_selection_indicator()
 		return
 
 	var all_arrived := true
