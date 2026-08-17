@@ -462,6 +462,15 @@ func _on_action_button_pressed(id: String) -> void:
 
 # ===== 输入：统一「click」动作 + 列车拖拽浏览 =====
 func _unhandled_input(event: InputEvent) -> void:
+	# 鼠标滚轮缩放（世界内容）
+	if event is InputEventMouseButton:
+		if event.pressed and event.button_index == MOUSE_BUTTON_WHEEL_UP:
+			_on_zoom_in_pressed()
+			return
+		if event.pressed and event.button_index == MOUSE_BUTTON_WHEEL_DOWN:
+			_on_zoom_out_pressed()
+			return
+
 	var pos_variant: Variant = event.get("position")
 	var pos: Vector2 = pos_variant if pos_variant is Vector2 else Vector2.ZERO
 	# 屏幕坐标 → 世界局部坐标（画面缩放后内部逻辑仍用局部坐标）
@@ -892,7 +901,7 @@ func _build_hud() -> void:
 	_res_panel = GridContainer.new()
 	_res_panel.name = "ResourcePanel"
 	_res_panel.columns = 3
-	_res_panel.position = Vector2(12, 172)
+	_res_panel.position = Vector2(880, 12)
 	_res_panel.add_theme_constant_override("h_separation", 8)
 	_res_panel.add_theme_constant_override("v_separation", 4)
 	$HUD.add_child(_res_panel)
@@ -913,7 +922,7 @@ func _build_hud() -> void:
 
 	_char_panel = VBoxContainer.new()
 	_char_panel.name = "CharacterPanel"
-	_char_panel.position = Vector2(12, 300)
+	_char_panel.position = Vector2(880, 120)
 	_char_panel.custom_minimum_size = Vector2(390, 0)
 	_char_panel.add_theme_constant_override("separation", 4)
 	$HUD.add_child(_char_panel)
