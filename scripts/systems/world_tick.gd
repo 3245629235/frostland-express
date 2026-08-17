@@ -7,6 +7,8 @@ static func tick_world(delta: float, crew_count: int, world_consume_time: float,
 	# 副作用：更新 world_consume_time 并返回新值
 	var events = {
 		"consume_steps": 0,
+		"moving_steps": 0,
+		"idle_steps": 0,
 		"food_ok_steps": 0,
 		"food_fail_steps": 0,
 		"travel_completed": false,
@@ -16,19 +18,26 @@ static func tick_world(delta: float, crew_count: int, world_consume_time: float,
 	# 1. 列车物理
 	TrainPhysics.update_physics(delta, train, train_control_mode)
 
-	# 2. 仅旅行中且列车在动时才消耗资源（DEMO_DESIGN §2：食物/燃料随行驶结算）
-	if not is_traveling or train.get("speed", 0.0) <= 0.01:
+	# 2. 非旅行状态（主界面溜车）不结算消耗
+	if not is_traveling:
 		return events
 
+	# 3. 每 CONSUME_INTERVAL 结算一次（行驶或停靠都会推进角色状态）
 	var wt = world_consume_time + delta
 	events["world_consume_time"] = wt
 
 	while wt >= GameConfig.CONSUME_INTERVAL:
 		wt -= GameConfig.CONSUME_INTERVAL
-		events["consume_steps"] += 1
 		events["world_consume_time"] = wt
+		events["consume_steps"] += 1
 
-		# 食物消耗
+		var moving: bool = train.get("speed", 0.0) > 0.01
+		if moving:
+			events["moving_steps"] += 1
+		else:
+			events["idle_steps"] += 1
+
+		# 食物：每 tick 角色数×1（全程）
 		var food_cost = max(crew_count, 0) * GameConfig.FOOD_PER_CHAR_PER_TICK
 		var has_food = true
 		if food_cost > 0:
@@ -38,13 +47,14 @@ static func tick_world(delta: float, crew_count: int, world_consume_time: float,
 		else:
 			events["food_fail_steps"] += 1
 
-		# 燃料：先把全局燃料池补给到煤水车（25 上限缓冲），再按设计值消耗
-		FuelSystem.refuel_tenders(train, resources)
-		var speed_kmh: float = train.get("speed", 0.0) * 3.6
-		var fuel_cost: float = GameConfig.FUEL_BASE_PER_TICK
-		if speed_kmh > GameConfig.FUEL_SPEED_BONUS_KMH:
-			fuel_cost *= GameConfig.FUEL_SPEED_BONUS_MULT
-		FuelSystem.consume_train_fuel(train, fuel_cost)
+		# 燃料：仅行驶时（速度>0），先补给煤水车缓冲再按设计值消耗
+		if moving:
+			FuelSystem.refuel_tenders(train, resources)
+			var speed_kmh: float = train.get("speed", 0.0) * 3.6
+			var fuel_cost: float = GameConfig.FUEL_BASE_PER_TICK
+			if speed_kmh > GameConfig.FUEL_SPEED_BONUS_KMH:
+				fuel_cost *= GameConfig.FUEL_SPEED_BONUS_MULT
+			FuelSystem.consume_train_fuel(train, fuel_cost)
 
 	return events
 

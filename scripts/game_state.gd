@@ -158,7 +158,50 @@ func stop_travel() -> void:
 func tick_world(delta: float, crew_count: int = 0) -> Dictionary:
 	var result = WorldTick.tick_world(delta, crew_count, world_consume_time, train, resources, train_control_mode, is_traveling)
 	world_consume_time = result["world_consume_time"]
+	_apply_character_ticks(result)
 	return result
+
+
+## 角色状态结算（DEMO_DESIGN §2.3）：每 2s 一步
+func _apply_character_ticks(result: Dictionary) -> void:
+	if characters.is_empty():
+		return
+	var food_ok: int = int(result.get("food_ok_steps", 0))
+	var food_fail: int = int(result.get("food_fail_steps", 0))
+	var moving: int = int(result.get("moving_steps", 0))
+	var idle: int = int(result.get("idle_steps", 0))
+
+	for step in range(food_ok):
+		_tick_characters("hunger", GameConfig.HUNGER_DELTA_HAS_FOOD, false)
+	for step in range(food_fail):
+		_tick_characters("hunger", GameConfig.HUNGER_DELTA_NO_FOOD, false)
+	for step in range(moving):
+		_tick_characters("temperature", GameConfig.TEMP_DELTA_MOVING, false)
+		_tick_characters("stamina", GameConfig.STAMINA_DELTA_MOVING, true)
+	for step in range(idle):
+		_tick_characters("temperature", GameConfig.TEMP_DELTA_STOPPED, false)
+		_tick_characters("stamina", GameConfig.STAMINA_DELTA_STOPPED, true)
+
+	var steps: int = int(result.get("consume_steps", 0))
+	for step in range(steps):
+		for c in characters:
+			# 低状态扣血
+			if float(c.get("hunger", 50.0)) < GameConfig.HUNGER_DAMAGE_THRESHOLD:
+				c["health"] = clampf(float(c.get("health", 0.0)) - GameConfig.HEALTH_DAMAGE_PER_TICK, 0.0, float(c.get("max_health", 100.0)))
+			if float(c.get("temperature", 90.0)) < GameConfig.TEMP_DAMAGE_THRESHOLD:
+				c["health"] = clampf(float(c.get("health", 0.0)) - GameConfig.HEALTH_DAMAGE_PER_TICK, 0.0, float(c.get("max_health", 100.0)))
+			# 自动用药：HP<50% 时消耗 1 药品恢复 20
+			var max_hp: float = float(c.get("max_health", 100.0))
+			if float(c.get("health", 0.0)) < max_hp * GameConfig.AUTO_MEDICINE_HP_RATIO:
+				if consume_resource("medicine", GameConfig.AUTO_MEDICINE_COST):
+					c["health"] = clampf(float(c.get("health", 0.0)) + GameConfig.AUTO_MEDICINE_HEAL, 0.0, max_hp)
+
+
+func _tick_characters(field: String, delta_value: int, use_max_stamina: bool) -> void:
+	for c in characters:
+		var cur: float = float(c.get(field, 0.0))
+		var cap: float = float(c.get("max_stamina", 100.0)) if use_max_stamina else 100.0
+		c[field] = clampf(cur + delta_value, 0.0, cap)
 
 
 # ===== 查询接口 =====

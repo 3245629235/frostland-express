@@ -26,3 +26,38 @@ const FUEL_SPEED_BONUS_KMH: float = 60.0
 ## 油耗加成倍率（速度>60 km/h 时 +50%）
 const FUEL_SPEED_BONUS_MULT: float = 1.5
 
+# ===== 角色状态（每 CONSUME_INTERVAL 2s 结算，DEMO_DESIGN §2.3）=====
+## 饥饿：有食物 -2，无食物 -5；<20 扣 HP 3
+const HUNGER_DELTA_HAS_FOOD: int = -2
+const HUNGER_DELTA_NO_FOOD: int = -5
+const HUNGER_DAMAGE_THRESHOLD: float = 20.0
+## 体温：行驶 -1，停靠 +2；<30 扣 HP 3
+const TEMP_DELTA_MOVING: int = -1
+const TEMP_DELTA_STOPPED: int = 2
+const TEMP_DAMAGE_THRESHOLD: float = 30.0
+## 体力：行驶 -2，停靠 +1；0 时不可操作交互点
+const STAMINA_DELTA_MOVING: int = -2
+const STAMINA_DELTA_STOPPED: int = 1
+## 低状态扣血
+const HEALTH_DAMAGE_PER_TICK: float = 3.0
+## 自动用药：HP<50% 时消耗 1 药品恢复 20（DEMO_DESIGN §2.1/§2.3）
+const AUTO_MEDICINE_HP_RATIO: float = 0.5
+const AUTO_MEDICINE_COST: int = 1
+const AUTO_MEDICINE_HEAL: float = 20.0
+
+# ===== 维修（DEMO_DESIGN §2.4）=====
+const REPAIR_COST_PARTS: int = 10
+const REPAIR_FULL_THRESHOLD: float = 90.0    # ≥90 修满 100
+const REPAIR_MINOR_THRESHOLD: float = 50.0   # 50~89 +20，上限 90
+const REPAIR_MINOR_AMOUNT: float = 20.0
+const REPAIR_MINOR_CAP: float = 90.0
+const REPAIR_SEVERE_THRESHOLD: float = 25.0  # 25~49 停靠 +10；<25 不可修
+const REPAIR_SEVERE_AMOUNT: float = 10.0
+
+# ===== 收集（DEMO_DESIGN §2.1/§3）=====
+const COLLECT_DURATION: float = 5.0
+const COLLECT_FOOD_MIN: float = 5.0
+const COLLECT_FOOD_MAX: float = 15.0
+const COLLECT_FUEL_MIN: float = 3.0
+const COLLECT_FUEL_MAX: float = 10.0
+
