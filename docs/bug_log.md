@@ -9,7 +9,10 @@
 - **影响**：Demo 核心闭环（编组→出发）被阻断。
 - **定位**：team.gd 的 `_save_train()` 只写 `user://train_save.json`，未同步写 `GameState.train.carriages`；main.gd `_on_board_button_pressed` 只读 GameState。
 - **修复方案**：team.gd 保存时同步构造 `GameState.train.carriages`（type/is_powered/fuel_left/health/flipped）并 `save_state()`；或 main.gd 出发时从 train_save.json 兜底加载。
-- **状态**：待修复（Day 2 前）
+- **状态**：✅ 已修复（2026-08-17 Day 2.1，双保险落地）
+  1. 同步保存：`train_save.gd::save_train` → `GameState.update_train_composition()` + `save_state()`（基线已有，Day 2.1 复核确认在放置/回收/清空/返回四条路径都调用）。
+  2. 旧档兜底：`train_save.gd::migrate_legacy_train_save()` 新增——GameState 无编组时从旧版 `train_save.json` 恢复并备份为 `.legacy_bak`；`load_train_save()` 与 `main.gd::_on_board_button_pressed` 均已接入。
+  3. 验证（MCP 实测）：标题→主界面→出发链路通；模拟「GameState 空 + 旧档在」场景，点出发后 carriages 0→2（机车+煤水车）、has_powered=true、旧档成功备份、game_state.json 落盘，用户存档已原样恢复。
 
 ### BUG-002 【中】survival.tscn 与 survival.gd 不匹配
 - **现象**：survival.tscn（2774B，7/21）只有 SpeedLabel/ModeLabel/BtnAccel/BtnBrake/BtnBack，而 survival.gd（16KB，8/4）含角色面板/资源条/收集/维修逻辑；运行无报错（疑似 get_node_or_null 或动态构建），但 UI 展示层明显缺失。
@@ -27,7 +30,8 @@
 ### BUG-005 【低】AcceptDialog 弹窗无法用模拟输入关闭（测试通道限制）
 - **现象**：`game_manage input_mouse` 与 `input_key Escape` 对 Window 类型弹窗（AcceptDialog）无效；`editor_manage game_eval` 返回 null。
 - **影响**：自动化测试无法关闭模态弹窗（需重启游戏清状态）。
-- **处理**：冒烟脚本已绕开（不点会弹窗的按钮）；game_eval 通道待查明（不影响游戏本身）。
+- **处理**：冒烟脚本已绕开（不点会弹窗的按钮）。
+- **更新（2026-08-17 Day 2.1）**：`editor_manage(op=game_eval)` 实测可用（服务器端 v3.4.7 已修复）——`{"op":"game_eval","params":{"code":"..."}}` 可执行 GDScript 并返回 JSON。注意两点：① eval 中不要引用 `VehicleTypes`/`TrainSave` 等全局类（会触发 "Cannot call non-static function on the class" 并把游戏挂到 debugger break，需 stop+run 恢复）；用 autoload（GameState）和场景树节点即可。② 新增 `tools/mcp_call.py` 从 JSON 文件读参数，绕开 PowerShell 引号剥除问题。
 
 ## 测试通道记录（工具侧）
 - `tools/mcp_client.py`：轻量 MCP 客户端（Streamable HTTP，自动 session 初始化），可用。

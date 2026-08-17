@@ -68,6 +68,10 @@ func _on_team_button_pressed() -> void:
 
 func _on_board_button_pressed() -> void:
 	var carriages = GameState.train.get("carriages", [])
+	# BUG-001 兜底：GameState 为空但旧版 train_save.json 有编组时自动迁移
+	if carriages.is_empty() and TrainSave.migrate_legacy_train_save():
+		carriages = GameState.train.get("carriages", [])
+		print("[DEBUG main._on_board_button_pressed] 旧档 train_save.json 已迁移并同步 GameState")
 	print("[DEBUG main._on_board_button_pressed] carriages=%d has_powered_loco=%s" % [carriages.size(), GameState.has_powered_locomotive()])
 	for c in carriages:
 		print("[DEBUG main._on_board_button_pressed]   type=%s fuel_left=%s is_powered=%s" % [c.get("type","?"), c.get("fuel_left","N/A"), c.get("is_powered","N/A")])
