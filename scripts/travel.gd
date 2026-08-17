@@ -554,6 +554,8 @@ func _process(delta: float) -> void:
 	for member in _crew:
 		var sprite: Sprite2D = member["sprite"]
 		var target: Vector2 = _target_pos + member["formation_offset"]
+		# 每个成员的目标都吸附到最近可通行点，避免队形偏移把小队友带进锅炉等禁区
+		target.x = _nearest_walkable_x(target.x)
 		var pos: Vector2 = sprite.global_position
 		var dist: float = pos.distance_to(target)
 		if dist < 4.0:
