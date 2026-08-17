@@ -9,6 +9,13 @@ import json
 import os
 import sys
 
+# Windows GBK 控制台输出中文/emoji 时避免 UnicodeEncodeError
+if hasattr(sys.stdout, "reconfigure"):
+    try:
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    except Exception:
+        pass
+
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from mcp_client import rpc  # noqa: E402
 

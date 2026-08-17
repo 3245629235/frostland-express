@@ -71,6 +71,7 @@ def run(only=None):
             els2 = ui_elements()
             back = [e for e in els2
                     if e.get("name") == "BackButton"
+                    or e.get("name") == "BackBtn"
                     or ("返回" in e.get("name", "") and "Background" not in e.get("name", ""))
                     or e.get("name") in ("HomeButton", "MenuButton")]
             if back:
