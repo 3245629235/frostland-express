@@ -1,6 +1,6 @@
 [gd_scene format=3 uid="uid://teamscene001"]
 
-[ext_resource type="Script" uid="uid://teamscript001" path="res://scripts/team.gd" id="1"]
+[ext_resource type="Script" path="res://scripts/team.gd" id="1"]
 [ext_resource type="Texture2D" uid="uid://0snrnvx18wvo" path="res://assets/sprites/game_background.jpg" id="2"]
 [ext_resource type="Texture2D" uid="uid://walltex001" path="res://assets/sprites/wall.png" id="3"]
 [ext_resource type="Texture2D" uid="uid://ceilingfloor001" path="res://assets/sprites/ceiling_floor.png" id="4"]
