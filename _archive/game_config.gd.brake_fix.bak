@@ -1,0 +1,50 @@
+extends RefCounted
+class_name GameConfig
+
+# ===== 游戏全局配置常量 =====
+# 所有代码中散落的魔法数字统一在此处定义
+# 各处引用方式: GameConfig.CONSUME_INTERVAL 等
+
+# ---- 资源消耗 ----
+const CONSUME_INTERVAL: float = 2.0     # 资源消耗间隔（秒）
+const FOOD_PER_CHAR_PER_TICK: int = 1   # 每名角色每次消耗的食物
+const FUEL_PER_TICK: int = 3            # 每次消耗的燃料
+
+# ---- 生存模式 ----
+const TRAVEL_DURATION: float = 30.0     # 单程行驶时长（秒）
+const COLLECT_DURATION: float = 5.0     # 物资收集时长（秒）
+const TRAVEL_REWARD_FOOD: int = 5       # 到站奖励食物
+const TRAVEL_REWARD_PARTS: int = 3      # 到站奖励零件
+
+# ---- 收集产出 ----
+const COLLECT_FOOD_MIN: float = 5.0     # 收集食物最小值
+const COLLECT_FOOD_MAX: float = 15.0    # 收集食物最大值
+const COLLECT_FUEL_MIN: float = 3.0     # 收集燃料最小值
+const COLLECT_FUEL_MAX: float = 10.0    # 收集燃料最大值
+const COLLECT_ENEMY_CHANCE: float = 0.3 # 收集遭敌概率
+
+# ---- 维修系统 ----
+const REPAIR_COST_PARTS: int = 10       # 维修消耗零件数
+const REPAIR_AMOUNT: float = 20.0       # 基础修复量
+const REPAIR_THRESHOLD_FULL: float = 90.0   # 满修阈值（≥此值直接修满）
+const REPAIR_THRESHOLD_MINOR: float = 50.0  # 轻度维修阈值
+const REPAIR_THRESHOLD_MIN: float = 25.0    # 最低可修阈值
+const REPAIR_CAP_MINOR: float = 90.0        # 轻度维修上限
+const REPAIR_CAP_SEVERE: float = 50.0       # 严重维修上限
+const REPAIR_SEVERE_FACTOR: float = 0.5     # 严重维修效率因子
+
+# ---- 角色状态 ----
+const HUNGER_DELTA_HAS_FOOD: int = -2   # 有食物时饥饿变化
+const HUNGER_DELTA_NO_FOOD: int = -5    # 无食物时饥饿变化
+const HUNGER_DAMAGE_THRESHOLD: int = 20 # 饥饿低于此值扣血
+const TEMP_DELTA: int = -1              # 体温每 tick 变化
+const TEMP_DAMAGE_THRESHOLD: int = 30   # 体温低于此值扣血
+const STAMINA_DELTA_TRAVEL: int = -2    # 行驶时体力变化
+const STAMINA_DELTA_IDLE: int = 1       # 停靠时体力变化
+const HEALTH_DAMAGE_PER_TICK: int = 1   # 状态不足时每 tick 扣血
+
+# ---- 拖拽交互 ----
+const DRAG_THRESHOLD: float = 10.0      # 拖拽触发阈值（像素）
+
+# ---- 列车物理 ----
+const AERO_FACTOR: float = 0.01         # 风阻换算系数（drag_coefficient × AERO_FACTOR × v² = 风阻力 kN）

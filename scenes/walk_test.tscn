@@ -1,0 +1,11 @@
+﻿[gd_scene load_steps=2 format=3 uid="uid://dwalktest000000001"]
+
+[ext_resource type="Script" path="res://scripts/walk_test.gd" id="1_script"]
+
+[node name="WalkTest" type="Node2D"]
+script = ExtResource("1_script")
+walk_speed = 200.0
+character_texture_path = "res://assets/sprites/characters_walk/conductor.png"
+
+[node name="CharacterSprite" type="Sprite2D" parent="."]
+position = Vector2(640, 400)

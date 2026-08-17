@@ -1,0 +1,281 @@
+[gd_scene format=3 uid="uid://cp0rrnathhs1e"]
+
+[ext_resource type="Script" uid="uid://dv28o3r2q63p4" path="res://scripts/survival.gd" id="1"]
+[ext_resource type="Theme" uid="uid://dqemg4p0i1x2j" path="res://assets/themes/default_theme.tres" id="2"]
+
+[node name="Survival" type="Control" unique_id=418123940]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+theme = ExtResource("2")
+script = ExtResource("1")
+
+[node name="Background" type="TextureRect" parent="." unique_id=400108449]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+stretch_mode = 2
+
+[node name="ResourcePanel" type="Panel" parent="." unique_id=1965329564]
+custom_minimum_size = Vector2(0, 80)
+layout_mode = 1
+anchors_preset = -1
+anchor_left = 0.5
+anchor_right = 1.0
+offset_bottom = 80.0
+grow_horizontal = 2
+
+[node name="ResourceGrid" type="HBoxContainer" parent="ResourcePanel" unique_id=273467030]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = 20.0
+offset_top = 10.0
+offset_right = -20.0
+offset_bottom = -10.0
+grow_horizontal = 2
+grow_vertical = 2
+alignment = 1
+
+[node name="Food" type="VBoxContainer" parent="ResourcePanel/ResourceGrid" unique_id=390744884]
+layout_mode = 2
+
+[node name="FoodIcon" type="TextureRect" parent="ResourcePanel/ResourceGrid/Food" unique_id=599111733]
+custom_minimum_size = Vector2(32, 32)
+layout_mode = 2
+
+[node name="FoodLabel" type="Label" parent="ResourcePanel/ResourceGrid/Food" unique_id=1034331479]
+layout_mode = 2
+text = "食物: 100"
+horizontal_alignment = 1
+
+[node name="Fuel" type="VBoxContainer" parent="ResourcePanel/ResourceGrid" unique_id=185181170]
+layout_mode = 2
+
+[node name="FuelIcon" type="TextureRect" parent="ResourcePanel/ResourceGrid/Fuel" unique_id=1522531204]
+custom_minimum_size = Vector2(32, 32)
+layout_mode = 2
+
+[node name="FuelLabel" type="Label" parent="ResourcePanel/ResourceGrid/Fuel" unique_id=255100404]
+layout_mode = 2
+text = "燃料: 80"
+horizontal_alignment = 1
+
+[node name="Medicine" type="VBoxContainer" parent="ResourcePanel/ResourceGrid" unique_id=1944544286]
+layout_mode = 2
+
+[node name="MedicineIcon" type="TextureRect" parent="ResourcePanel/ResourceGrid/Medicine" unique_id=1981818659]
+custom_minimum_size = Vector2(32, 32)
+layout_mode = 2
+
+[node name="MedicineLabel" type="Label" parent="ResourcePanel/ResourceGrid/Medicine" unique_id=228287817]
+layout_mode = 2
+text = "药品: 30"
+horizontal_alignment = 1
+
+[node name="Parts" type="VBoxContainer" parent="ResourcePanel/ResourceGrid" unique_id=787546019]
+layout_mode = 2
+
+[node name="PartsIcon" type="TextureRect" parent="ResourcePanel/ResourceGrid/Parts" unique_id=371811263]
+custom_minimum_size = Vector2(32, 32)
+layout_mode = 2
+
+[node name="PartsLabel" type="Label" parent="ResourcePanel/ResourceGrid/Parts" unique_id=1725545206]
+layout_mode = 2
+text = "零件: 50"
+horizontal_alignment = 1
+
+[node name="AmmoSmall" type="VBoxContainer" parent="ResourcePanel/ResourceGrid" unique_id=1297278724]
+layout_mode = 2
+
+[node name="AmmoSmallIcon" type="TextureRect" parent="ResourcePanel/ResourceGrid/AmmoSmall" unique_id=634676961]
+custom_minimum_size = Vector2(32, 32)
+layout_mode = 2
+
+[node name="AmmoSmallLabel" type="Label" parent="ResourcePanel/ResourceGrid/AmmoSmall" unique_id=1097495177]
+layout_mode = 2
+text = "小弹药: 200"
+horizontal_alignment = 1
+
+[node name="AmmoLarge" type="VBoxContainer" parent="ResourcePanel/ResourceGrid" unique_id=979279775]
+layout_mode = 2
+
+[node name="AmmoLargeIcon" type="TextureRect" parent="ResourcePanel/ResourceGrid/AmmoLarge" unique_id=161607823]
+custom_minimum_size = Vector2(32, 32)
+layout_mode = 2
+
+[node name="AmmoLargeLabel" type="Label" parent="ResourcePanel/ResourceGrid/AmmoLarge" unique_id=1705431382]
+layout_mode = 2
+text = "大弹药: 50"
+horizontal_alignment = 1
+
+[node name="CharacterPanel" type="Panel" parent="." unique_id=1837825641]
+custom_minimum_size = Vector2(200, 300)
+layout_mode = 1
+anchors_preset = -1
+anchor_left = 0.25
+anchor_right = 0.25
+offset_top = 20.0
+offset_right = -20.0
+grow_horizontal = 0
+
+[node name="CharacterTitle" type="Label" parent="CharacterPanel" unique_id=1125371201]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_top = 10.0
+offset_bottom = -20.0
+grow_horizontal = 2
+grow_vertical = 2
+text = "车组成员"
+horizontal_alignment = 1
+
+[node name="CharacterList" type="VBoxContainer" parent="CharacterPanel" unique_id=763961175]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_top = 40.0
+offset_right = -10.0
+offset_bottom = -10.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="TrainPanel" type="Panel" parent="." unique_id=643227881]
+layout_mode = 1
+anchors_preset = -1
+anchor_left = 0.27
+anchor_top = 1.0
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = 0.3999939
+offset_top = -135.0
+offset_right = -19.599976
+offset_bottom = -135.0
+grow_vertical = 0
+
+[node name="TrainTitle" type="Label" parent="TrainPanel" unique_id=1929091484]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_top = 10.0
+offset_bottom = -20.0
+grow_horizontal = 2
+grow_vertical = 2
+text = "列车状态"
+horizontal_alignment = 1
+
+[node name="TrainStatus" type="VBoxContainer" parent="TrainPanel" unique_id=1896532926]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_top = 40.0
+offset_right = -10.0
+offset_bottom = -10.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="HealthBar" type="ProgressBar" parent="TrainPanel/TrainStatus" unique_id=1071971373]
+custom_minimum_size = Vector2(0, 24)
+layout_mode = 2
+value = 100.0
+
+[node name="HealthLabel" type="Label" parent="TrainPanel/TrainStatus" unique_id=840317367]
+layout_mode = 2
+text = "列车血量: 100/100"
+horizontal_alignment = 1
+
+[node name="EfficiencyLabel" type="Label" parent="TrainPanel/TrainStatus" unique_id=182218993]
+layout_mode = 2
+text = "效率: 100%"
+horizontal_alignment = 1
+
+[node name="MoraleBar" type="ProgressBar" parent="TrainPanel/TrainStatus" unique_id=196155508]
+custom_minimum_size = Vector2(0, 24)
+layout_mode = 2
+value = 50.0
+
+[node name="MoraleLabel" type="Label" parent="TrainPanel/TrainStatus" unique_id=407699962]
+layout_mode = 2
+text = "士气: 50%"
+horizontal_alignment = 1
+
+[node name="ActionPanel" type="Panel" parent="." unique_id=2063089447]
+custom_minimum_size = Vector2(0, 60)
+layout_mode = 1
+anchors_preset = -1
+anchor_left = 0.27
+anchor_top = 0.5
+anchor_right = 1.0
+anchor_bottom = 0.5
+offset_top = -60.0
+offset_bottom = -100.0
+grow_vertical = 2
+
+[node name="ActionButtons" type="HBoxContainer" parent="ActionPanel" unique_id=2037127011]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = 20.0
+offset_top = 10.0
+offset_right = -20.0
+offset_bottom = -10.0
+grow_horizontal = 2
+grow_vertical = 2
+alignment = 1
+
+[node name="TravelButton" type="Button" parent="ActionPanel/ActionButtons" unique_id=1734857892]
+custom_minimum_size = Vector2(120, 40)
+layout_mode = 2
+text = "开始旅行"
+
+[node name="StopButton" type="Button" parent="ActionPanel/ActionButtons" unique_id=2038487913]
+custom_minimum_size = Vector2(120, 40)
+layout_mode = 2
+disabled = true
+text = "停车"
+
+[node name="CollectButton" type="Button" parent="ActionPanel/ActionButtons" unique_id=1177705949]
+custom_minimum_size = Vector2(120, 40)
+layout_mode = 2
+disabled = true
+text = "收集物资"
+
+[node name="RepairButton" type="Button" parent="ActionPanel/ActionButtons" unique_id=1690675822]
+custom_minimum_size = Vector2(120, 40)
+layout_mode = 2
+text = "维修列车"
+
+[node name="BackButton" type="Button" parent="ActionPanel/ActionButtons" unique_id=604587817]
+custom_minimum_size = Vector2(120, 40)
+layout_mode = 2
+text = "返回编组"
+
+[node name="HomeButton" type="Button" parent="ActionPanel/ActionButtons" unique_id=151482649]
+custom_minimum_size = Vector2(120, 40)
+layout_mode = 2
+text = "返回主界面"
+
+[node name="DebugLabel" type="Label" parent="." unique_id=241415793]
+layout_mode = 1
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = 10.0
+offset_top = 10.0
+grow_horizontal = 2
+grow_vertical = 2
+text = "生存模式"

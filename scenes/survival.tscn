@@ -1,0 +1,132 @@
+[gd_scene format=3 uid="uid://cp0rrnathhs1e"]
+
+[ext_resource type="Script" uid="uid://dv28o3r2q63p4" path="res://scripts/survival.gd" id="1"]
+
+[node name="Survival" type="Control"]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+script = ExtResource("1")
+
+; ---- 视差层 ----
+
+[node name="Layer0Sky" type="Control" parent="."]
+layout_mode = 0
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+z_index = 0
+
+[node name="Layer1FarCloud" type="Control" parent="."]
+layout_mode = 0
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+z_index = 1
+
+[node name="Layer2MidCloud" type="Control" parent="."]
+layout_mode = 0
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+z_index = 2
+
+[node name="Layer3Ground" type="Control" parent="."]
+layout_mode = 0
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+z_index = 3
+
+[node name="Layer4FrontTree" type="Control" parent="."]
+layout_mode = 0
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+z_index = 6
+
+; ---- 列车展示 ----
+
+[node name="TrainContainer" type="Control" parent="."]
+layout_mode = 0
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+clip_contents = true
+z_index = 5
+
+; ---- 控制台 ----
+
+[node name="ControlPanel" type="Control" parent="."]
+layout_mode = 0
+offset_left = 10.0
+offset_top = 520.0
+offset_right = 300.0
+offset_bottom = 710.0
+z_index = 10
+
+[node name="SpeedLabel" type="Label" parent="ControlPanel"]
+layout_mode = 0
+offset_left = 0.0
+offset_top = 0.0
+offset_right = 180.0
+offset_bottom = 40.0
+text = "速度: 0 km/h"
+theme_override_font_sizes/font_size = 22
+theme_override_colors/font_color = Color(1, 1, 1, 1)
+z_index = 10
+
+[node name="ModeLabel" type="Label" parent="ControlPanel"]
+layout_mode = 0
+offset_left = 0.0
+offset_top = 45.0
+offset_right = 180.0
+offset_bottom = 75.0
+text = "滑行"
+theme_override_font_sizes/font_size = 20
+theme_override_colors/font_color = Color(0.7, 0.8, 1, 1)
+z_index = 10
+
+[node name="BtnAccel" type="Button" parent="ControlPanel"]
+layout_mode = 0
+offset_left = 0.0
+offset_top = 100.0
+offset_right = 120.0
+offset_bottom = 140.0
+text = "加速"
+z_index = 10
+
+[node name="BtnBrake" type="Button" parent="ControlPanel"]
+layout_mode = 0
+offset_left = 170.0
+offset_top = 100.0
+offset_right = 280.0
+offset_bottom = 140.0
+text = "刹车"
+z_index = 10
+
+; ---- 返回按钮 ----
+
+[node name="BtnBack" type="Button" parent="."]
+layout_mode = 0
+offset_left = 10.0
+offset_top = 10.0
+offset_right = 100.0
+offset_bottom = 50.0
+text = "返回"
+z_index = 20

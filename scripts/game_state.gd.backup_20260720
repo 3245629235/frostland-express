@@ -1,0 +1,164 @@
+﻿extends Node
+# ===== 资源类型 =====
+enum ResourceType { FOOD, FUEL, MEDICINE, PARTS, AMMO_SMALL, AMMO_LARGE }
+
+const RESOURCE_STR = {
+	ResourceType.FOOD: "food",
+	ResourceType.FUEL: "fuel",
+	ResourceType.MEDICINE: "medicine",
+	ResourceType.PARTS: "parts",
+	ResourceType.AMMO_SMALL: "ammo_small",
+	ResourceType.AMMO_LARGE: "ammo_large",
+}
+
+const STR_RESOURCE = {
+	"food": ResourceType.FOOD,
+	"fuel": ResourceType.FUEL,
+	"medicine": ResourceType.MEDICINE,
+	"parts": ResourceType.PARTS,
+	"ammo_small": ResourceType.AMMO_SMALL,
+	"ammo_large": ResourceType.AMMO_LARGE,
+}
+
+const RESOURCE_NAMES = {
+	ResourceType.FOOD: "食物",
+	ResourceType.FUEL: "燃料",
+	ResourceType.MEDICINE: "药品",
+	ResourceType.PARTS: "零件",
+	ResourceType.AMMO_SMALL: "小口径弹药",
+	ResourceType.AMMO_LARGE: "大口径弹药",
+}
+
+# ===== 游戏状态单例（Autoload） =====
+var resources: Dictionary = {}
+var characters: Array = []
+var train: Dictionary = {}
+var morale: float = 50.0
+var is_traveling: bool = false
+var travel_time: float = 0.0
+var current_node: String = "station_start"
+
+# ===== 初始化 =====
+func _ready() -> void:
+	_reset_resources()
+	_reset_train()
+	load_state()
+
+func _reset_resources() -> void:
+	resources = {
+		"food": 1000,
+		"fuel": 1000,
+		"medicine": 1000,
+		"parts": 1000,
+		"ammo_small": 1000,
+		"ammo_large": 1000,
+	}
+
+func _reset_train() -> void:
+	train = {
+		"health": 100.0,
+		"max_health": 100.0,
+		"speed": 1.0,
+		"carriages": [],
+	}
+
+# ===== 完整重置 =====
+func full_reset() -> void:
+	_reset_resources()
+	_reset_train()
+	characters = []
+	morale = 50.0
+	is_traveling = false
+	travel_time = 0.0
+	current_node = "station_start"
+
+# ===== 重置资源为默认值（通过公开方法） =====
+func reset_resources() -> void:
+	_reset_resources()
+
+# ===== 资源操作 =====
+func get_resource(type_str: String) -> int:
+	return resources.get(type_str, 0)
+
+func add_resource(type_str: String, amount: int) -> void:
+	resources[type_str] = resources.get(type_str, 0) + amount
+
+func consume_resource(type_str: String, amount: int) -> bool:
+	if resources.get(type_str, 0) >= amount:
+		resources[type_str] -= amount
+		return true
+	return false
+
+# ===== 列车状态 =====
+func set_train_health(health: float) -> void:
+	train.health = clamp(health, 0, train.max_health)
+
+func damage_train(amount: float) -> void:
+	set_train_health(train.health - amount)
+
+func repair_train(amount: float) -> void:
+	set_train_health(train.health + amount)
+
+func get_train_efficiency() -> float:
+	return train.health / train.max_health
+
+# ===== 保存/加载 =====
+func save_state() -> void:
+	var save_data = {
+		"resources": resources,
+		"characters": characters,
+		"train": train,
+		"morale": morale,
+		"is_traveling": is_traveling,
+		"travel_time": travel_time,
+		"current_node": current_node,
+	}
+	var file = FileAccess.open("user://game_state.json", FileAccess.WRITE)
+	if file:
+		file.store_string(JSON.stringify(save_data))
+		file.close()
+
+func load_state() -> bool:
+	if not FileAccess.file_exists("user://game_state.json"):
+		return false
+	var file = FileAccess.open("user://game_state.json", FileAccess.READ)
+	if not file:
+		return false
+	var content = file.get_as_text()
+	file.close()
+	var data = JSON.parse_string(content)
+	if data == null:
+		return false
+	if data.has("resources"):
+		resources = data.resources
+	if data.has("characters"):
+		characters = data.characters
+	if data.has("train"):
+		train = data.train
+	if data.has("morale"):
+		morale = float(data.morale)
+	if data.has("is_traveling"):
+		is_traveling = bool(data.is_traveling)
+	if data.has("travel_time"):
+		travel_time = float(data.travel_time)
+	if data.has("current_node"):
+		current_node = data.current_node
+	return true
+
+# 场景退出时自动保存
+func _exit_tree() -> void:
+	save_state()
+
+# ===== 旅行消耗计算 =====
+func calculate_travel_consumption(duration: float) -> Dictionary:
+	var consumption = {
+		"food": int(duration * 2),
+		"fuel": int(duration * 3),
+	}
+	return consumption
+
+func apply_travel_consumption(consumption: Dictionary) -> bool:
+	for key in consumption.keys():
+		if not consume_resource(key, consumption[key]):
+			return false
+	return true

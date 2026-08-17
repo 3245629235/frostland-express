@@ -1,0 +1,918 @@
+extends Control
+
+# ===== 可在编辑器中调整的参数 =====
+@export var wall_speed_ratio: float = 0.8
+@export var cf_speed_ratio: float = 1.0
+@export var rail_y_ratio: float = 0.85
+@export var vehicle_height_ratio: float = 0.36
+@export var card_panel_height: float = 200.0
+@export var card_size: Vector2 = Vector2(140, 140)
+@export var train_start_x_ratio: float = 0.1
+
+# 兼容旧导出变量（从配置表读取，保留导出参数用于自定义覆盖）
+@export var initial_locomotive_count: int = 3
+@export var initial_coal_tender_count: int = 4
+@export var initial_passenger_count: int = 2
+
+# ===== 节点引用 =====
+@onready var back_button: Button = $BackButton
+@onready var debug_label: Label = $DebugLabel
+@onready var wall_container: Control = $WallContainer
+@onready var cf_container: Control = $CeilingFloorContainer
+@onready var build_menu: MenuButton = $BuildMenu
+@onready var card_panel: Panel = $CardPanel
+@onready var card_title: Label = $CardPanel/CardTitle
+@onready var card_container: HBoxContainer = $CardPanel/CardContainer
+@onready var clear_all_button: Button = $CardPanel/ClearAllButton
+@onready var placed_vehicles_node: Control = $RailArea/PlacedVehicles
+@onready var drag_preview: TextureRect = $DragPreview
+
+# ===== 常量 =====
+const SAVE_PATH = "user://train_save.json"
+const TYPE_LOCO = "locomotive"
+const TYPE_COAL = "coal_tender"
+const TYPE_PASSENGER = "passenger"
+const TYPE_OPEN = "open_car"
+const TYPE_TANK = "tank_car"
+const TYPE_SERVICE = "service_car"
+const TYPE_COMBAT = "combat_car"
+
+# 构建菜单配置：索引 -> 车型字符串（null 表示未实现，submenu 表示子菜单）
+const MENU_ITEMS = [
+	{"name": "机车", "type": TYPE_LOCO},
+	{"name": "煤水车", "type": TYPE_COAL},
+	{"name": "特殊机车", "type": null},
+	{"name": "货车", "submenu": [
+		{"name": "敞车", "type": TYPE_OPEN},
+		{"name": "罐车", "type": TYPE_TANK},
+	]},
+	{"name": "客车", "type": TYPE_PASSENGER},
+	{"name": "勤务车厢", "type": TYPE_SERVICE},
+	{"name": "战斗车厢", "type": TYPE_COMBAT},
+]
+
+# ===== 视差滚动变量 =====
+var wall_texture: Texture2D
+var cf_texture: Texture2D
+var scroll_x: float = 0.0
+var target_scroll: float = 0.0
+var train_length: float = 3.0
+var max_scroll: float = 0.0
+var is_dragging_screen: bool = false
+var drag_start_mouse_x: float = 0.0
+var drag_start_scroll: float = 0.0
+var last_mouse_x: float = 0.0
+var momentum: float = 0.0
+var view_w: float = 0.0
+var view_h: float = 0.0
+var wall_scaled_width: float = 0.0
+var cf_scaled_width: float = 0.0
+
+# ===== 车辆数据 =====
+# 车型字符串 -> {card_tex, vehicle_tex, scaled_width, name, initial_count}
+var vehicle_data: Dictionary = {}
+# 玩家拥有的车辆数量（车型字符串 -> 数量）
+var player_inventory: Dictionary = {}
+# 当前展示的卡片类型
+var current_card_type: String = ""
+# 已放置的车辆列表，每个元素: {type, width, flipped, node}
+var placed_vehicles: Array = []
+
+# ===== 拖动状态 =====
+# drag_mode: 0=无, 1=从卡片拖出去放置, 2=从列车拖出去回收
+var drag_mode: int = 0
+var drag_card_type: String = ""
+var drag_vehicle_index: int = -1
+var has_dragged: bool = false
+
+# ===== 布局缓存 =====
+var rail_y: float = 0.0
+var vehicle_target_height: float = 0.0
+
+
+func _ready() -> void:
+	back_button.pressed.connect(_on_back_pressed)
+	clear_all_button.pressed.connect(_on_clear_all_pressed)
+	_setup_build_menu()
+	
+	# 初始化视口尺寸和布局
+	view_w = get_viewport().get_visible_rect().size.x
+	view_h = get_viewport().get_visible_rect().size.y
+	rail_y = view_h * rail_y_ratio
+	vehicle_target_height = view_h * vehicle_height_ratio
+	card_panel.offset_top = -card_panel_height
+	
+	# 初始化车辆数据（从配置表读取，可被导出变量覆盖）
+	_init_vehicle_data()
+	
+	# 加载视差纹理
+	if not _load_parallax_textures():
+		return
+	
+	# 加载保存的编组
+	_load_train_save()
+	
+	# 初始化拖动预览
+	drag_preview.visible = false
+	_update_debug_label()
+
+
+# ===== 初始化 =====
+func _init_vehicle_data() -> void:
+	# 从 VehicleTypes 配置表构建数据
+	for t in VehicleTypes.get_all_types():
+		var type_str = VehicleTypes.enum_to_string(t)
+		var cfg = VehicleTypes.CONFIG[t]
+		# 允许导出变量覆盖初始数量
+		var init_count = cfg.initial_count
+		if type_str == TYPE_LOCO:
+			init_count = initial_locomotive_count
+		elif type_str == TYPE_COAL:
+			init_count = initial_coal_tender_count
+		elif type_str == TYPE_PASSENGER:
+			init_count = initial_passenger_count
+		
+		vehicle_data[type_str] = {
+			"name": cfg.name,
+			"card_path": cfg.card_path,
+			"vehicle_path": cfg.vehicle_path,
+			"initial_count": init_count,
+			"card_tex": null,
+			"vehicle_tex": null,
+			"scaled_width": 0.0,
+		}
+		player_inventory[type_str] = init_count
+	
+	# 加载纹理
+	for type_str in vehicle_data.keys():
+		var d = vehicle_data[type_str]
+		var ct = load(d.card_path) as Texture2D
+		var vt = load(d.vehicle_path) as Texture2D
+		if ct != null:
+			d.card_tex = ct
+		if vt != null:
+			d.vehicle_tex = vt
+			var scale_factor: float = vehicle_target_height / vt.get_height()
+			d.scaled_width = vt.get_width() * scale_factor
+
+
+func _load_parallax_textures() -> bool:
+	wall_texture = load("res://assets/sprites/wall.png") as Texture2D
+	cf_texture = load("res://assets/sprites/ceiling_floor.png") as Texture2D
+	if wall_texture == null or cf_texture == null:
+		debug_label.text = "图片加载失败！"
+		return false
+	
+	var wall_scale: float = view_h / wall_texture.get_height()
+	var cf_scale: float = view_h / cf_texture.get_height()
+	wall_scaled_width = wall_texture.get_width() * wall_scale
+	cf_scaled_width = cf_texture.get_width() * cf_scale
+	_create_parallax_sprites(wall_container, wall_texture, wall_scaled_width)
+	_create_parallax_sprites(cf_container, cf_texture, cf_scaled_width)
+	_update_max_scroll()
+	return true
+
+
+# ===== 视差滚动 =====
+func _create_parallax_sprites(container: Control, tex: Texture2D, scaled_w: float) -> void:
+	var count: int = int(ceil(view_w / scaled_w)) + 2
+	for i in range(count):
+		var t := TextureRect.new()
+		t.texture = tex
+		t.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		t.stretch_mode = TextureRect.STRETCH_SCALE
+		t.offset_left = i * scaled_w
+		t.offset_top = 0
+		t.offset_right = i * scaled_w + scaled_w
+		t.offset_bottom = view_h
+		t.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		container.add_child(t)
+
+
+func _process(delta: float) -> void:
+	if not is_dragging_screen:
+		momentum *= 0.92
+		target_scroll += momentum
+		target_scroll = clamp(target_scroll, 0, max_scroll)
+		if target_scroll == 0 or target_scroll == max_scroll:
+			momentum = 0
+	
+	scroll_x = lerp(scroll_x, target_scroll, 10.0 * delta)
+	_update_parallax_positions()
+	if not placed_vehicles.is_empty():
+		_rearrange_vehicles()
+
+
+func _update_parallax_positions() -> void:
+	_update_layer_positions(wall_container, wall_scaled_width, scroll_x * wall_speed_ratio)
+	_update_layer_positions(cf_container, cf_scaled_width, scroll_x * cf_speed_ratio)
+
+
+func _update_layer_positions(container: Control, scaled_w: float, offset: float) -> void:
+	var children: Array[Node] = container.get_children()
+	var wrap_w = scaled_w * children.size()
+	var mod_off = fmod(offset, scaled_w)
+	for i in range(children.size()):
+		var sp: TextureRect = children[i] as TextureRect
+		if sp == null:
+			continue
+		var x: float = i * scaled_w - mod_off
+		while x < -scaled_w:
+			x += wrap_w
+		while x > view_w:
+			x -= wrap_w
+		sp.offset_left = x
+		sp.offset_right = x + scaled_w
+
+
+func _update_max_scroll() -> void:
+	if placed_vehicles.is_empty():
+		max_scroll = cf_scaled_width * train_length - view_w
+	else:
+		var total_width = 0.0
+		for v in placed_vehicles:
+			total_width += v.width
+		max_scroll = total_width - view_w * 0.3
+	max_scroll = max(max_scroll, 0)
+	if target_scroll > max_scroll:
+		target_scroll = max_scroll
+
+
+# ===== 构建菜单 =====
+func _setup_build_menu() -> void:
+	var popup: PopupMenu = build_menu.get_popup()
+	popup.clear()
+	for i in range(MENU_ITEMS.size()):
+		var item = MENU_ITEMS[i]
+		if item.has("submenu"):
+			# 创建子菜单
+			var submenu = PopupMenu.new()
+			submenu.name = "freight_submenu"
+			for j in range(item.submenu.size()):
+				submenu.add_item(item.submenu[j].name, j)
+			submenu.index_pressed.connect(_on_submenu_selected.bind(i))
+			popup.add_child(submenu)
+			popup.add_submenu_item(item.name, submenu.name, i)
+		else:
+			popup.add_item(item.name, i)
+	popup.index_pressed.connect(_on_build_menu_selected)
+
+
+func _on_build_menu_selected(index: int) -> void:
+	var item = MENU_ITEMS[index]
+	# 子菜单项由 _on_submenu_selected 处理，这里跳过
+	if item.has("submenu"):
+		return
+	if item.type == null:
+		debug_label.text = item.name + " (暂未实现)"
+		return
+	_show_cards(item.type)
+	debug_label.text = "已展示: " + item.name + "卡片，拖动到铁轨放置"
+
+
+func _on_submenu_selected(sub_index: int, parent_index: int) -> void:
+	var item = MENU_ITEMS[parent_index].submenu[sub_index]
+	if item.type == null:
+		debug_label.text = item.name + " (暂未实现)"
+		return
+	_show_cards(item.type)
+	debug_label.text = "已展示: " + item.name + "卡片，拖动到铁轨放置"
+
+
+# ===== 卡片展示 =====
+func _show_cards(type: String) -> void:
+	current_card_type = type
+	for child in card_container.get_children():
+		child.queue_free()
+	
+	var d = vehicle_data.get(type)
+	if d == null or d.card_tex == null:
+		card_title.text = "卡片加载失败"
+		return
+	
+	var count: int = player_inventory.get(type, 0)
+	if count == 0:
+		card_title.text = "没有" + d.name + "卡片"
+		return
+	
+	card_title.text = d.name + "卡片 x" + str(count) + " (拖动到铁轨上放置)"
+	
+	for i in range(count):
+		var card := TextureRect.new()
+		card.texture = d.card_tex
+		card.custom_minimum_size = card_size
+		card.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		card.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+		card.gui_input.connect(_on_card_gui_input.bind(type))
+		card_container.add_child(card)
+
+
+func _on_card_gui_input(event: InputEvent, type: String) -> void:
+	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT:
+		if event.pressed:
+			_start_card_drag(type, event.global_position)
+		else:
+			if drag_mode == 1 and has_dragged:
+				_try_place_vehicle(event.global_position)
+			_end_drag()
+
+
+# ===== 输入处理 =====
+func _input(event: InputEvent) -> void:
+	if drag_mode != 0:
+		_handle_drag_input(event)
+		return
+	_handle_scroll_input(event)
+
+
+func _handle_drag_input(event: InputEvent) -> void:
+	if event is InputEventMouseButton:
+		if event.button_index == MOUSE_BUTTON_LEFT and not event.pressed:
+			if has_dragged:
+				if drag_mode == 1:
+					_try_place_vehicle(event.position)
+				elif drag_mode == 2:
+					_try_recycle_vehicle(event.position)
+			_end_drag()
+	elif event is InputEventMouseMotion:
+		has_dragged = true
+		var mouse_pos = event.position
+		drag_preview.position = mouse_pos - drag_preview.size / 2
+		_update_drag_preview_texture(mouse_pos.y)
+
+
+func _handle_scroll_input(event: InputEvent) -> void:
+	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT:
+		if event.pressed:
+			if event.position.y < view_h - card_panel_height:
+				is_dragging_screen = true
+				drag_start_mouse_x = event.position.x
+				drag_start_scroll = target_scroll
+				last_mouse_x = event.position.x
+				momentum = 0
+		else:
+			is_dragging_screen = false
+	elif event is InputEventMouseMotion and is_dragging_screen:
+		var dx: float = event.position.x - drag_start_mouse_x
+		target_scroll = clamp(drag_start_scroll - dx, 0, max_scroll)
+		momentum = last_mouse_x - event.position.x
+		last_mouse_x = event.position.x
+
+
+# 根据鼠标位置切换拖动预览的纹理（卡片<->车辆）
+func _update_drag_preview_texture(mouse_y: float) -> void:
+	var panel_top = view_h - card_panel_height
+	var show_card = mouse_y > panel_top  # 在卡片区域显示卡片纹理，否则显示车辆纹理
+	var d = vehicle_data.get(drag_card_type)
+	if d == null:
+		return
+	
+	if show_card:
+		if drag_preview.texture != d.card_tex:
+			drag_preview.texture = d.card_tex
+			drag_preview.size = card_size
+	else:
+		if drag_preview.texture != d.vehicle_tex:
+			drag_preview.texture = d.vehicle_tex
+			drag_preview.size = _get_vehicle_preview_size(drag_card_type)
+
+
+# 获取车辆预览尺寸
+func _get_vehicle_preview_size(type: String) -> Vector2:
+	var d = vehicle_data.get(type)
+	if d == null or d.vehicle_tex == null:
+		return card_size
+	var vt: Texture2D = d.vehicle_tex
+	var vscale: float = vehicle_target_height / vt.get_height()
+	return Vector2(vt.get_width() * vscale, vehicle_target_height)
+
+
+func _start_card_drag(type: String, global_pos: Vector2) -> void:
+	drag_mode = 1
+	drag_card_type = type
+	drag_vehicle_index = -1
+	has_dragged = false
+	var d = vehicle_data.get(type)
+	drag_preview.texture = d.card_tex if d else null
+	drag_preview.size = card_size
+	drag_preview.position = global_pos - card_size / 2
+	drag_preview.visible = true
+
+
+func _start_vehicle_drag(index: int, global_pos: Vector2) -> void:
+	if index < 0 or index >= placed_vehicles.size():
+		return
+	var v = placed_vehicles[index]
+	drag_mode = 2
+	drag_card_type = v.type
+	drag_vehicle_index = index
+	has_dragged = false
+	drag_preview.texture = vehicle_data[v.type].vehicle_tex
+	drag_preview.size = Vector2(v.width, vehicle_target_height)
+	drag_preview.position = global_pos - Vector2(v.width / 2, vehicle_target_height / 2)
+	drag_preview.visible = true
+	v.node.visible = false
+
+
+func _end_drag() -> void:
+	# 如果是从列车拖动车辆但没有实际拖动，恢复车辆可见性
+	if drag_mode == 2 and not has_dragged and drag_vehicle_index >= 0 and drag_vehicle_index < placed_vehicles.size():
+		placed_vehicles[drag_vehicle_index].node.visible = true
+	drag_mode = 0
+	drag_card_type = ""
+	drag_vehicle_index = -1
+	has_dragged = false
+	drag_preview.visible = false
+
+
+# ===== 车辆放置 =====
+func _try_place_vehicle(mouse_pos: Vector2) -> void:
+	var type = drag_card_type
+	if type == "" or not vehicle_data.has(type):
+		return
+	
+	if mouse_pos.y > view_h - card_panel_height:
+		return
+	
+	var insert_index = _calc_insert_index(mouse_pos.x)
+	var error_msg = _check_placement_rules(type, insert_index)
+	if error_msg != "":
+		debug_label.text = "连挂失败: " + error_msg
+		return
+	
+	_place_vehicle_at(type, insert_index)
+	_save_train()
+	
+	var msg = vehicle_data[type].name + "放置成功! 列车长度:" + str(placed_vehicles.size())
+	if _has_unpowered_locomotives():
+		msg += " (警告: 有机车没有动力)"
+	debug_label.text = msg
+
+
+func _place_vehicle_at(type: String, insert_index: int) -> void:
+	var d = vehicle_data[type]
+	var v_width = d.scaled_width
+	
+	var v_node := TextureRect.new()
+	v_node.texture = d.vehicle_tex
+	v_node.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	v_node.stretch_mode = TextureRect.STRETCH_SCALE
+	v_node.flip_h = false  # 翻转由 _refresh_flips 统一处理
+	v_node.mouse_filter = Control.MOUSE_FILTER_STOP
+	v_node.gui_input.connect(_on_vehicle_gui_input.bind(v_node))
+	placed_vehicles_node.add_child(v_node)
+	
+	placed_vehicles.insert(insert_index, {
+		"type": type,
+		"width": v_width,
+		"flipped": false,
+		"node": v_node,
+	})
+	
+	player_inventory[type] -= 1
+	_rearrange_vehicles()
+	_refresh_flips()
+	
+	if current_card_type != "":
+		_show_cards(current_card_type)
+
+
+# 计算放置后所有机车是否仍在两端
+# 返回 true 表示合法，false 表示非法
+func _locomotives_at_ends_after_insert(insert_index: int) -> bool:
+	var new_size = placed_vehicles.size() + 1
+	for i in range(placed_vehicles.size()):
+		if placed_vehicles[i].type == TYPE_LOCO:
+			var new_pos = i if i < insert_index else i + 1
+			if new_pos != 0 and new_pos != new_size - 1:
+				return false
+	return true
+
+
+func _refresh_flips() -> void:
+	var left_loco_idx = -1
+	var right_loco_idx = -1
+	
+	for i in range(placed_vehicles.size()):
+		if placed_vehicles[i].type == TYPE_LOCO:
+			if left_loco_idx < 0:
+				left_loco_idx = i
+			right_loco_idx = i
+	
+	for i in range(placed_vehicles.size()):
+		var v = placed_vehicles[i]
+		if v.type == TYPE_LOCO:
+			v.flipped = (i == placed_vehicles.size() - 1 and i != 0)
+		elif v.type == TYPE_COAL:
+			if left_loco_idx == right_loco_idx:
+				v.flipped = false
+			elif right_loco_idx >= 0 and i == right_loco_idx - 1:
+				v.flipped = true
+			elif left_loco_idx >= 0 and i == left_loco_idx + 1:
+				v.flipped = false
+			elif left_loco_idx >= 0 and right_loco_idx >= 0:
+				var dist_to_left = i - left_loco_idx
+				var dist_to_right = right_loco_idx - i
+				v.flipped = dist_to_right <= dist_to_left
+			else:
+				v.flipped = false
+		elif _is_cargo_type(v.type):
+			v.flipped = false  # 货运类车厢朝向一律不变
+		v.node.flip_h = v.flipped
+
+
+
+func _on_vehicle_gui_input(event: InputEvent, node: TextureRect) -> void:
+	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT and event.pressed:
+		for i in range(placed_vehicles.size()):
+			if placed_vehicles[i].node == node:
+				_start_vehicle_drag(i, event.global_position)
+				break
+
+
+func _try_recycle_vehicle(mouse_pos: Vector2) -> void:
+	if drag_vehicle_index < 0 or drag_vehicle_index >= placed_vehicles.size():
+		return
+	
+	var panel_top = view_h - card_panel_height
+	if mouse_pos.y < panel_top:
+		placed_vehicles[drag_vehicle_index].node.visible = true
+		return
+	
+	var type = drag_card_type
+	var v = placed_vehicles[drag_vehicle_index]
+	
+	# 检查回收规则
+	var error_msg = _check_recycle_rules(drag_vehicle_index)
+	if error_msg != "":
+		placed_vehicles[drag_vehicle_index].node.visible = true
+		debug_label.text = "回收失败: " + error_msg
+		return
+	
+	v.node.queue_free()
+	placed_vehicles.remove_at(drag_vehicle_index)
+	player_inventory[type] += 1
+	
+	_refresh_flips()
+	_rearrange_vehicles()
+	_save_train()
+	
+	if current_card_type != "":
+		_show_cards(current_card_type)
+	
+	debug_label.text = vehicle_data[type].name + "已回收"
+	if _has_unpowered_locomotives():
+		debug_label.text += " (警告: 有机车没有动力)"
+
+
+func _check_recycle_rules(index: int) -> String:
+	var v = placed_vehicles[index]
+	
+	if v.type == TYPE_LOCO and index == 0 and placed_vehicles.size() > 1:
+		return "最左侧的机车必须最后一个回收"
+	
+	# 方向性动力检查：仅当回收后所有机车都无动力时才拒绝（列车完全无法运行）
+	if v.type == TYPE_LOCO or v.type == TYPE_COAL:
+		if _all_locomotives_unpowered_after_remove(index):
+			return "回收后所有机车将无动力，列车无法运行"
+	
+	return ""
+
+
+# 模拟移除指定索引的车辆后，检查是否所有机车都无动力（列车完全无法运行）
+func _all_locomotives_unpowered_after_remove(skip_index: int) -> bool:
+	var removed = placed_vehicles[skip_index]
+	placed_vehicles.remove_at(skip_index)
+	var result = _all_locomotives_unpowered()
+	placed_vehicles.insert(skip_index, removed)
+	return result
+
+
+# 检查是否所有机车都无动力
+func _all_locomotives_unpowered() -> bool:
+	for i in range(placed_vehicles.size()):
+		var v = placed_vehicles[i]
+		if v.type != TYPE_LOCO:
+			continue
+		var has_power = false
+		if v.flipped:
+			for j in range(i - 1, -1, -1):
+				var prev_v = placed_vehicles[j]
+				if prev_v.type == TYPE_COAL:
+					has_power = true
+					break
+				elif prev_v.type == TYPE_LOCO or _is_cargo_type(prev_v.type):
+					break
+		else:
+			for j in range(i + 1, placed_vehicles.size()):
+				var next_v = placed_vehicles[j]
+				if next_v.type == TYPE_COAL:
+					has_power = true
+					break
+				elif next_v.type == TYPE_LOCO or _is_cargo_type(next_v.type):
+					break
+		if has_power:
+			return false  # 至少一台机车有动力
+	return true  # 全部无动力
+
+
+func _calc_insert_index(mouse_x: float) -> int:
+	if placed_vehicles.is_empty():
+		return 0
+	
+	var start_x = view_w * train_start_x_ratio - scroll_x
+	var current_x = start_x
+	
+	for i in range(placed_vehicles.size()):
+		var v = placed_vehicles[i]
+		var mid_x = current_x + v.width / 2
+		
+		if mouse_x < mid_x:
+			return i
+		
+		current_x += v.width
+	
+	return placed_vehicles.size()
+
+
+# 放置规则校验，返回错误信息（空字符串表示合法）
+func _check_placement_rules(type: String, insert_index: int) -> String:
+	if type == TYPE_LOCO:
+		if insert_index != 0 and insert_index != placed_vehicles.size():
+			return "机车只能放在列车两端"
+		var loco_count = _count_type(TYPE_LOCO)
+		if loco_count >= 2:
+			return "机车数量已达上限（两端各一个）"
+		if not _locomotives_at_ends_after_insert(insert_index):
+			return "放置后有机车不在两端，无法放置"
+		var coal_count = _count_type(TYPE_COAL) + player_inventory.get(TYPE_COAL, 0)
+		if loco_count + 1 > coal_count:
+			return "机车需要煤水车提供燃料，请先添加煤水车"
+	
+	elif type == TYPE_COAL:
+		if placed_vehicles.is_empty():
+			return "煤水车不能单独放置，请先放机车"
+		if _count_type(TYPE_LOCO) == 0:
+			return "煤水车必须与机车相连"
+		if _count_type(TYPE_LOCO) == 1 and _leftmost_loco_index() == 0 and insert_index <= _leftmost_loco_index():
+			return "当只有一个机车时，不能在机车左边放置煤水车"
+		if not _locomotives_at_ends_after_insert(insert_index):
+			return "放置后有机车不在两端，无法放置"
+		if _coal_would_be_between_passengers(insert_index):
+			return "煤水车不能放置在车厢之间"
+	
+	elif _is_cargo_type(type):
+		if placed_vehicles.is_empty():
+			return "车厢不能单独放置，请先放机车"
+		if _count_type(TYPE_LOCO) == 0:
+			return "车厢必须与机车相连"
+		var loco_count = _count_type(TYPE_LOCO)
+		if loco_count >= 2:
+			if insert_index == 0 or insert_index == placed_vehicles.size():
+				return "有两个机车时，车厢不能放置在列车两端"
+		if loco_count == 1 and _leftmost_loco_index() == 0 and insert_index == 0:
+			return "车厢不能放置在机车左边"
+		if not _locomotives_at_ends_after_insert(insert_index):
+			return "放置后有机车不在两端，无法放置"
+		if _passenger_would_split_power_unit(insert_index):
+			return "车厢不能放置在机车和煤水车之间"
+	
+	return ""
+
+
+# 判断是否为货运类车厢（客车、敞车、罐车、勤务车厢、战斗车厢）
+func _is_cargo_type(type: String) -> bool:
+	return type == TYPE_PASSENGER or type == TYPE_OPEN or type == TYPE_TANK or type == TYPE_SERVICE or type == TYPE_COMBAT
+
+
+# 检查煤水车放置后是否会被夹在货运车厢之间
+func _coal_would_be_between_passengers(insert_index: int) -> bool:
+	if placed_vehicles.is_empty():
+		return false
+	var has_cargo_before = false
+	for i in range(insert_index):
+		if _is_cargo_type(placed_vehicles[i].type):
+			has_cargo_before = true
+			break
+	var has_cargo_after = false
+	for i in range(insert_index, placed_vehicles.size()):
+		if _is_cargo_type(placed_vehicles[i].type):
+			has_cargo_after = true
+			break
+	return has_cargo_before and has_cargo_after
+
+
+# 检查客车放置后是否会打断直接相邻的机车和煤水车（动力单元）
+func _passenger_would_split_power_unit(insert_index: int) -> bool:
+	if placed_vehicles.is_empty():
+		return false
+	
+	var left_type = ""
+	if insert_index > 0:
+		left_type = placed_vehicles[insert_index - 1].type
+	
+	var right_type = ""
+	if insert_index < placed_vehicles.size():
+		right_type = placed_vehicles[insert_index].type
+	
+	if left_type == TYPE_LOCO and right_type == TYPE_COAL:
+		return true
+	if left_type == TYPE_COAL and right_type == TYPE_LOCO:
+		return true
+	
+	return false
+
+
+# 检查是否有机车没有相邻的煤水车（即没有动力）
+func _has_unpowered_locomotives() -> bool:
+	for i in range(placed_vehicles.size()):
+		var v = placed_vehicles[i]
+		if v.type != TYPE_LOCO:
+			continue
+		var has_power = false
+		if v.flipped:
+			for j in range(i - 1, -1, -1):
+				var prev_v = placed_vehicles[j]
+				if prev_v.type == TYPE_COAL:
+					has_power = true
+					break
+				elif prev_v.type == TYPE_LOCO or _is_cargo_type(prev_v.type):
+					break
+		else:
+			for j in range(i + 1, placed_vehicles.size()):
+				var next_v = placed_vehicles[j]
+				if next_v.type == TYPE_COAL:
+					has_power = true
+					break
+				elif next_v.type == TYPE_LOCO or _is_cargo_type(next_v.type):
+					break
+		if not has_power:
+			return true
+	return false
+
+
+# 统计某类型车辆数量
+func _count_type(type: String) -> int:
+	var count = 0
+	for v in placed_vehicles:
+		if v.type == type:
+			count += 1
+	return count
+
+
+# 获取最左侧机车的索引（无机车返回-1）
+func _leftmost_loco_index() -> int:
+	for i in range(placed_vehicles.size()):
+		if placed_vehicles[i].type == TYPE_LOCO:
+			return i
+	return -1
+
+
+func _rearrange_vehicles() -> void:
+	_update_max_scroll()
+	var start_x = view_w * train_start_x_ratio - scroll_x
+	var current_x = start_x
+	for v in placed_vehicles:
+		v.node.size = Vector2(v.width, vehicle_target_height)
+		v.node.position = Vector2(current_x, rail_y - vehicle_target_height)
+		current_x += v.width
+
+
+# ===== 一键清除 =====
+func _on_clear_all_pressed() -> void:
+	if placed_vehicles.is_empty():
+		debug_label.text = "列车上没有车辆"
+		return
+	
+	for v in placed_vehicles:
+		v.node.queue_free()
+		player_inventory[v.type] += 1
+	
+	placed_vehicles.clear()
+	scroll_x = 0
+	target_scroll = 0
+	_update_max_scroll()
+	
+	if current_card_type != "":
+		_show_cards(current_card_type)
+	
+	_save_train()
+	debug_label.text = "已清除所有车辆"
+
+
+# ===== 调试信息 =====
+func _update_debug_label() -> void:
+	var inv_str = "库存:"
+	for type_str in player_inventory.keys():
+		inv_str += " " + vehicle_data[type_str].name + str(player_inventory[type_str])
+	debug_label.text = inv_str + " | 已放置:" + str(placed_vehicles.size())
+
+
+# ===== 编组保存/加载 =====
+func _save_train() -> void:
+	var save_data = {
+		"placed_vehicles": [],
+		"inventory": player_inventory,
+	}
+	for v in placed_vehicles:
+		save_data.placed_vehicles.append({
+			"type": v.type,
+			"flipped": v.flipped,
+		})
+	
+	var file = FileAccess.open(SAVE_PATH, FileAccess.WRITE)
+	if file:
+		file.store_string(JSON.stringify(save_data))
+		file.close()
+
+
+func _load_train_save() -> void:
+	if not FileAccess.file_exists(SAVE_PATH):
+		return
+	
+	var file = FileAccess.open(SAVE_PATH, FileAccess.READ)
+	if not file:
+		return
+	
+	var content = file.get_as_text()
+	file.close()
+	
+	var data = JSON.parse_string(content)
+	if data == null:
+		return
+	
+	# 从配置表构建初始总量（不再硬编码车型）
+	var initial_total = {}
+	for type_str in vehicle_data.keys():
+		initial_total[type_str] = vehicle_data[type_str].initial_count
+	
+	# 读取存档的库存和已放置数量
+	var saved_inventory = {}
+	if data.has("inventory"):
+		for key in data.inventory.keys():
+			saved_inventory[key] = int(data.inventory[key])
+	
+	var saved_placed_count = {}
+	for type_str in vehicle_data.keys():
+		saved_placed_count[type_str] = 0
+	if data.has("placed_vehicles"):
+		for v_data in data.placed_vehicles:
+			var vtype = v_data.type
+			if saved_placed_count.has(vtype):
+				saved_placed_count[vtype] += 1
+	
+	# 校验：库存 + 已放置 应该等于初始总量
+	var corrupted = false
+	for key in initial_total.keys():
+		var total = saved_inventory.get(key, 0) + saved_placed_count.get(key, 0)
+		if total != initial_total[key] or saved_inventory.get(key, 0) < 0:
+			corrupted = true
+			break
+	
+	if corrupted:
+		# 存档损坏，重置库存
+		for type_str in vehicle_data.keys():
+			player_inventory[type_str] = vehicle_data[type_str].initial_count
+		return
+	
+	# 校验通过，加载库存
+	for key in saved_inventory.keys():
+		if player_inventory.has(key):
+			player_inventory[key] = saved_inventory[key]
+	
+	# 加载已放置车辆
+	if data.has("placed_vehicles"):
+		for v_data in data.placed_vehicles:
+			var vtype = v_data.type
+			if not vehicle_data.has(vtype):
+				continue
+			var d = vehicle_data[vtype]
+			var v_node := TextureRect.new()
+			v_node.texture = d.vehicle_tex
+			v_node.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+			v_node.stretch_mode = TextureRect.STRETCH_SCALE
+			v_node.mouse_filter = Control.MOUSE_FILTER_STOP
+			v_node.gui_input.connect(_on_vehicle_gui_input.bind(v_node))
+			placed_vehicles_node.add_child(v_node)
+			
+			placed_vehicles.append({
+				"type": vtype,
+				"width": d.scaled_width,
+				"flipped": v_data.get("flipped", false),
+				"node": v_node,
+			})
+		
+		_refresh_flips()
+		_rearrange_vehicles()
+
+
+func _on_back_pressed() -> void:
+	_save_train()
+	
+	var loco_count = _count_type(TYPE_LOCO)
+	var coal_count = _count_type(TYPE_COAL)
+	if loco_count > 0 and coal_count < loco_count:
+		debug_label.text = "列车无法运行：机车需要煤水车提供燃料和水"
+		return
+	
+	get_tree().change_scene_to_file("res://scenes/main.tscn")

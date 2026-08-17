@@ -1,0 +1,408 @@
+extends Control
+
+@onready var debug_label: Label = $DebugLabel
+@onready var resource_panel: Panel = $ResourcePanel
+@onready var character_panel: Panel = $CharacterPanel
+@onready var character_list: VBoxContainer = $CharacterPanel/CharacterList
+@onready var train_panel: Panel = $TrainPanel
+@onready var action_panel: Panel = $ActionPanel
+
+@onready var food_label: Label = $ResourcePanel/ResourceGrid/Food/FoodLabel
+@onready var fuel_label: Label = $ResourcePanel/ResourceGrid/Fuel/FuelLabel
+@onready var medicine_label: Label = $ResourcePanel/ResourceGrid/Medicine/MedicineLabel
+@onready var parts_label: Label = $ResourcePanel/ResourceGrid/Parts/PartsLabel
+@onready var ammo_small_label: Label = $ResourcePanel/ResourceGrid/AmmoSmall/AmmoSmallLabel
+@onready var ammo_large_label: Label = $ResourcePanel/ResourceGrid/AmmoLarge/AmmoLargeLabel
+
+@onready var health_bar: ProgressBar = $TrainPanel/TrainStatus/HealthBar
+@onready var health_label: Label = $TrainPanel/TrainStatus/HealthLabel
+@onready var efficiency_label: Label = $TrainPanel/TrainStatus/EfficiencyLabel
+@onready var morale_bar: ProgressBar = $TrainPanel/TrainStatus/MoraleBar
+@onready var morale_label: Label = $TrainPanel/TrainStatus/MoraleLabel
+
+@onready var travel_button: Button = $ActionPanel/ActionButtons/TravelButton
+@onready var stop_button: Button = $ActionPanel/ActionButtons/StopButton
+@onready var collect_button: Button = $ActionPanel/ActionButtons/CollectButton
+@onready var repair_button: Button = $ActionPanel/ActionButtons/RepairButton
+@onready var back_button: Button = $ActionPanel/ActionButtons/BackButton
+@onready var home_button: Button = $ActionPanel/ActionButtons/HomeButton
+
+var refuel_button: Button
+
+var characters: Array = []
+var is_traveling: bool = false
+var is_stopped: bool = false
+var travel_timer: float = 0.0
+var collect_timer: float = 0.0
+var is_collecting: bool = false
+
+# 所有游戏常量统一从 GameConfig 引用
+
+func _ready() -> void:
+	travel_button.pressed.connect(_on_travel_pressed)
+	stop_button.pressed.connect(_on_stop_pressed)
+	collect_button.pressed.connect(_on_collect_pressed)
+	repair_button.pressed.connect(_on_repair_pressed)
+	back_button.pressed.connect(_on_back_pressed)
+	home_button.pressed.connect(_on_home_pressed)
+
+	# 动态创建加煤按钮
+	refuel_button = Button.new()
+	refuel_button.text = "加煤"
+	refuel_button.custom_minimum_size = Vector2(80, 40)
+	refuel_button.pressed.connect(_on_refuel_pressed)
+	$ActionPanel/ActionButtons.add_child(refuel_button)
+
+	# GameState 是 Autoload 单例，数据已就绪
+	_create_initial_characters()
+	_update_all_ui()
+
+	is_traveling = GameState.is_traveling
+	if is_traveling:
+		travel_button.disabled = true
+		stop_button.disabled = false
+		collect_button.disabled = true
+		repair_button.disabled = true
+		refuel_button.disabled = false
+		debug_label.text = "列车运行中 - 资源持续消耗"
+	else:
+		travel_button.disabled = false
+		stop_button.disabled = true
+		collect_button.disabled = false
+		repair_button.disabled = false
+		refuel_button.disabled = false
+		debug_label.text = "列车已停靠 - 可进行收集和维修"
+
+func _create_initial_characters() -> void:
+	characters = []
+	# 优先使用 GameState 中的角色（从人员编成场景保存而来）
+	var source: Array
+	if not GameState.characters.is_empty():
+		source = GameState.characters
+	else:
+		source = CharacterData.get_default_team()
+
+	for cfg in source:
+		var character = cfg.duplicate(true)
+		# 确保生存模式所需的运行时字段存在
+		if not character.has("exp"):
+			character["exp"] = 0
+		if not character.has("next_level_exp"):
+			character["next_level_exp"] = 100
+		character["hunger"] = character.get("hunger", 50)
+		character["temperature"] = character.get("temperature", 90)
+		character["morale"] = character.get("morale", 60)
+		characters.append(character)
+
+func _process(delta: float) -> void:
+	var world_result = GameState.tick_world(delta, characters.size())
+	is_traveling = GameState.is_traveling
+	travel_timer = GameState.travel_time
+
+	if is_traveling:
+		_consume_resources(world_result)
+
+	if world_result.get("travel_completed", false):
+		_on_travel_complete()
+
+	if is_collecting:
+		collect_timer += delta
+		if collect_timer >= GameConfig.COLLECT_DURATION:
+			_complete_collection()
+
+	_update_all_ui()
+
+func _consume_resources(world_result: Dictionary) -> void:
+	var food_ok_steps = int(world_result.get("food_ok_steps", 0))
+	var food_fail_steps = int(world_result.get("food_fail_steps", 0))
+	var consume_steps = int(world_result.get("consume_steps", 0))
+
+	for i in range(food_ok_steps):
+		_update_character_hunger(GameConfig.HUNGER_DELTA_HAS_FOOD)
+	for i in range(food_fail_steps):
+		_update_character_hunger(GameConfig.HUNGER_DELTA_NO_FOOD)
+	for i in range(consume_steps):
+		_update_character_temperature()
+		_update_character_stamina()
+
+func _update_character_hunger(delta: int) -> void:
+	for character in characters:
+		character.hunger = clamp(character.hunger + delta, 0, 100)
+		if character.hunger < GameConfig.HUNGER_DAMAGE_THRESHOLD:
+			character.health -= GameConfig.HEALTH_DAMAGE_PER_TICK
+
+func _update_character_temperature() -> void:
+	for character in characters:
+		character.temperature = clamp(character.temperature + GameConfig.TEMP_DELTA, 0, 100)
+		if character.temperature < GameConfig.TEMP_DAMAGE_THRESHOLD:
+			character.health -= GameConfig.HEALTH_DAMAGE_PER_TICK
+
+func _update_character_stamina() -> void:
+	for character in characters:
+		if is_traveling:
+			character.stamina = clamp(character.stamina + GameConfig.STAMINA_DELTA_TRAVEL, 0, character.max_stamina)
+		else:
+			character.stamina = clamp(character.stamina + GameConfig.STAMINA_DELTA_IDLE, 0, character.max_stamina)
+
+func _complete_collection() -> void:
+	is_collecting = false
+	collect_timer = 0.0
+
+	var food_gain = randf_range(GameConfig.COLLECT_FOOD_MIN, GameConfig.COLLECT_FOOD_MAX)
+	var fuel_gain = randf_range(GameConfig.COLLECT_FUEL_MIN, GameConfig.COLLECT_FUEL_MAX)
+
+	GameState.add_resource("food", int(food_gain))
+	GameState.add_resource("fuel", int(fuel_gain))
+
+	debug_label.text = "收集完成: 食物+%d, 燃料+%d" % [food_gain, fuel_gain]
+
+	collect_button.disabled = false
+
+	if randf_range(0, 1) < GameConfig.COLLECT_ENEMY_CHANCE:
+		debug_label.text += " (遭遇敌人威胁!)"
+
+func _on_repair_pressed() -> void:
+	var repair_cost = GameConfig.REPAIR_COST_PARTS
+	if not GameState.consume_resource("parts", repair_cost):
+		debug_label.text = "零件不足 (需要 %d)!" % repair_cost
+		return
+
+	var current_health = GameState.train["health"]
+	var repair_amount = GameConfig.REPAIR_AMOUNT
+	var new_health = current_health + repair_amount
+
+	if is_stopped:
+		# 停车状态 - 可以进行更全面的维修
+		if current_health >= GameConfig.REPAIR_THRESHOLD_FULL:
+			new_health = 100.0
+		elif current_health >= GameConfig.REPAIR_THRESHOLD_MINOR:
+			new_health = min(current_health + repair_amount, GameConfig.REPAIR_CAP_MINOR)
+		elif current_health >= GameConfig.REPAIR_THRESHOLD_MIN:
+			new_health = min(current_health + repair_amount * GameConfig.REPAIR_SEVERE_FACTOR, GameConfig.REPAIR_CAP_SEVERE)
+		else:
+			debug_label.text = "列车损坏过重 (血量 < 25%%)，无法在停车状态修理!"
+			GameState.add_resource("parts", repair_cost)
+			return
+	else:
+		# 行驶状态 - 只能进行轻度维修
+		if current_health >= GameConfig.REPAIR_THRESHOLD_FULL:
+			new_health = 100.0
+		elif current_health >= GameConfig.REPAIR_THRESHOLD_MINOR:
+			new_health = min(current_health + repair_amount, GameConfig.REPAIR_CAP_MINOR)
+		else:
+			debug_label.text = "行驶中无法修理低血量列车 (血量 < 50%%)!"
+			GameState.add_resource("parts", repair_cost)
+			return
+
+	GameState.set_train_health(new_health)
+	debug_label.text = "修理完成! 血量: %.0f/%.0f" % [new_health, GameState.train["max_health"]]
+
+func _on_travel_pressed() -> void:
+	if is_traveling:
+		return
+
+	GameState.refresh_train_runtime_state()
+
+	GameState.start_travel()
+	is_traveling = true
+	is_stopped = false
+	travel_timer = GameState.travel_time
+
+	travel_button.disabled = true
+	stop_button.disabled = false
+	collect_button.disabled = true
+	repair_button.disabled = true
+	refuel_button.disabled = false
+
+	debug_label.text = "列车出发! 预计行驶 %.0f 秒" % GameConfig.TRAVEL_DURATION
+
+func _on_stop_pressed() -> void:
+	if not is_traveling:
+		return
+
+	GameState.stop_travel()
+	is_traveling = false
+	is_stopped = true
+
+	travel_button.disabled = false
+	stop_button.disabled = true
+	collect_button.disabled = false
+	repair_button.disabled = false
+	refuel_button.disabled = false
+
+	debug_label.text = "列车已停靠，可以收集物资或维修"
+
+func _on_travel_complete() -> void:
+	is_traveling = false
+	is_stopped = false
+	travel_timer = GameState.travel_time
+
+	travel_button.disabled = false
+	stop_button.disabled = true
+	collect_button.disabled = false
+	repair_button.disabled = false
+	refuel_button.disabled = false
+
+	debug_label.text = "到达新节点! 可探索或继续前进"
+
+func _on_collect_pressed() -> void:
+	if is_collecting:
+		return
+
+	is_collecting = true
+	collect_timer = 0.0
+	collect_button.disabled = true
+	debug_label.text = "正在收集物资... (%.0f秒)" % GameConfig.COLLECT_DURATION
+
+func _on_refuel_pressed() -> void:
+	var carriages = GameState.train["carriages"]
+	if carriages.size() == 0:
+		debug_label.text = "列车上没有车厢，无需加煤"
+		return
+
+	# 计算所需的燃料总量
+	var total_needed = 0.0
+	var tender_indices = []
+	for i in range(carriages.size()):
+		var c = carriages[i]
+		if c["type"] == "coal_tender":
+			var vtype = VehicleTypes.STR_TYPE.get("coal_tender")
+			var cap = VehicleTypes.CONFIG[vtype]["coal_capacity"] if vtype != null else 0.0
+			var current = c.get("fuel_left", 0.0)
+			var needed = cap - current
+			if needed > 0:
+				total_needed += needed
+				tender_indices.append({"idx": i, "needed": needed, "cap": cap})
+
+	if tender_indices.size() == 0:
+		debug_label.text = "所有煤水车燃料已满"
+		return
+
+	var available = GameState.get_resource("fuel")
+	if available <= 0:
+		debug_label.text = "全局燃料不足，无法加煤"
+		return
+
+	# 分配燃料：先尽可能填满
+	var used = 0.0
+	for ti in tender_indices:
+		var take = min(ti.needed, available - used)
+		if take <= 0:
+			break
+		carriages[ti.idx]["fuel_left"] += take
+		used += take
+
+	GameState.consume_resource("fuel", int(ceil(used)))
+	GameState.refresh_train_runtime_state()
+	var msg = "加煤完成: 消耗 %.0f 燃料" % used
+	if used < total_needed:
+		msg += " (燃料不足，部分煤水车未加满)"
+	debug_label.text = msg
+
+func _update_all_ui() -> void:
+	_update_resource_ui()
+	_update_train_ui()
+	_update_character_ui()
+
+func _update_resource_ui() -> void:
+	food_label.text = "食物: %d" % GameState.get_resource("food")
+	fuel_label.text = "燃料: %d" % GameState.get_resource("fuel")
+	medicine_label.text = "药品: %d" % GameState.get_resource("medicine")
+	parts_label.text = "零件: %d" % GameState.get_resource("parts")
+	ammo_small_label.text = "小弹药: %d" % GameState.get_resource("ammo_small")
+	ammo_large_label.text = "大弹药: %d" % GameState.get_resource("ammo_large")
+
+func _update_train_ui() -> void:
+	var health = GameState.train["health"]
+	var max_health = GameState.train["max_health"]
+	var efficiency = GameState.get_train_efficiency()
+
+	health_bar.value = health
+	health_label.text = "列车血量: %.0f/%.0f" % [health, max_health]
+	efficiency_label.text = "效率: %.0f%% | 速度: %.1f m/s" % [efficiency * 100, GameState.get_train_speed()]
+
+	morale_bar.value = GameState.morale
+	morale_label.text = "士气: %.0f%%" % GameState.morale
+
+	# 列车物理状态
+	var status_lines = []
+	var speed = GameState.get_train_speed()
+	var fuel_rate = GameState.get_train_fuel_consumption()
+	if fuel_rate == null:
+		fuel_rate = 0.0
+	status_lines.append("速度: %.1f m/s | 油耗: %.2f/s" % [speed, fuel_rate])
+
+	var loco_status = GameState.get_loco_power_status()
+	if loco_status.size() > 0:
+		var loco_line = ""
+		for i in range(loco_status.size()):
+			loco_line += "机车%d %s" % [i + 1, "●" if loco_status[i] else "○"]
+			if i < loco_status.size() - 1:
+				loco_line += " | "
+		status_lines.append(loco_line)
+
+	var tender_levels = GameState.get_tender_fuel_levels()
+	for i in range(tender_levels.size()):
+		var tl = tender_levels[i]
+		var ratio = tl["fuel"] / tl["capacity"] if tl["capacity"] > 0 else 0.0
+		var bar_len = 10
+		var filled = int(ceil(ratio * bar_len))
+		var bar = ""
+		for j in range(bar_len):
+			bar += "█" if j < filled else "░"
+		var warn = " [空!]" if tl["fuel"] <= 0 else ""
+		status_lines.append("煤水%d %s %.1f/%.0ft%s" % [i + 1, bar, tl["fuel"], tl["capacity"], warn])
+
+	if status_lines.size() > 0 and GameState.train["carriages"].size() > 0:
+		debug_label.text = "\n".join(status_lines)
+
+func _update_character_ui() -> void:
+	for child in character_list.get_children():
+		child.queue_free()
+
+	for character in characters:
+		var panel = Panel.new()
+		panel.custom_minimum_size = Vector2(0, 60)
+		character_list.add_child(panel)
+
+		var hbox = HBoxContainer.new()
+		hbox.add_theme_constant_override("separation", 10)
+		hbox.offset_left = 10
+		hbox.offset_top = 5
+		hbox.offset_right = -10
+		hbox.offset_bottom = -5
+		panel.add_child(hbox)
+
+		var name_label = Label.new()
+		name_label.text = character.name
+		name_label.add_theme_font_size_override("font_size", 14)
+		name_label.add_theme_color_override("font_color", Color(1, 1, 1))
+		hbox.add_child(name_label)
+
+		var status_vbox = VBoxContainer.new()
+		hbox.add_child(status_vbox)
+
+		var health_pbar = ProgressBar.new()
+		health_pbar.custom_minimum_size = Vector2(80, 12)
+		health_pbar.value = character.health
+		health_pbar.max_value = character.max_health
+		status_vbox.add_child(health_pbar)
+
+		var status_text = "%d/%d HP | 饥饿:%d%% | 体温:%d%%" % [
+			character.health, character.max_health, character.hunger, character.temperature
+		]
+		var status_label = Label.new()
+		status_label.text = status_text
+		status_label.add_theme_font_size_override("font_size", 11)
+		status_vbox.add_child(status_label)
+
+func _on_back_pressed() -> void:
+	GameState.save_state()
+	get_tree().change_scene_to_file("res://scenes/team.tscn")
+
+func _on_home_pressed() -> void:
+	GameState.save_state()
+	get_tree().change_scene_to_file("res://scenes/main.tscn")
+
+func _exit_tree() -> void:
+	GameState.save_state()

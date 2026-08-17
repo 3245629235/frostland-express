@@ -1,0 +1,97 @@
+[gd_scene format=3 uid="uid://bx5k2m4n1p8q"]
+
+[ext_resource type="Script" path="res://scripts/character_select_dialog.gd" id="1"]
+[ext_resource type="PackedScene" path="res://scenes/depot_card.tscn" id="2"]
+
+[node name="CharacterSelectDialog" type="CanvasLayer"]
+layer = 1000
+script = ExtResource("1")
+
+[node name="CharacterSelectDialog" type="Control" parent="."]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 0
+
+[node name="BGColor" type="ColorRect" parent="CharacterSelectDialog"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+color = Color(0.12, 0.15, 0.2, 1)
+
+[node name="TopBar" type="Panel" parent="CharacterSelectDialog"]
+layout_mode = 1
+anchors_preset = 10
+anchor_right = 1.0
+offset_bottom = 60.0
+grow_horizontal = 2
+
+[node name="TitleLabel" type="Label" parent="CharacterSelectDialog/TopBar"]
+layout_mode = 1
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -100.0
+offset_top = -15.0
+offset_right = 100.0
+offset_bottom = 15.0
+grow_horizontal = 2
+grow_vertical = 2
+text = "角色仓库"
+horizontal_alignment = 1
+theme_override_font_sizes/font_size = 28
+
+[node name="CloseBtn" type="Button" parent="CharacterSelectDialog/TopBar"]
+layout_mode = 1
+anchors_preset = 1
+anchor_left = 1.0
+anchor_right = 1.0
+offset_left = -80.0
+offset_top = 10.0
+offset_right = -10.0
+offset_bottom = 46.0
+grow_horizontal = 0
+text = "关闭"
+theme_override_font_sizes/font_size = 16
+
+[node name="LeaveBtn" type="Button" parent="CharacterSelectDialog/TopBar"]
+visible = false
+layout_mode = 1
+anchors_preset = 0
+anchor_left = 0.0
+anchor_right = 0.0
+offset_left = 10.0
+offset_top = 10.0
+offset_right = 80.0
+offset_bottom = 46.0
+grow_horizontal = 0
+text = "离队"
+theme_override_font_sizes/font_size = 16
+
+[node name="ScrollContainer" type="ScrollContainer" parent="CharacterSelectDialog"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_top = 70.0
+grow_horizontal = 2
+grow_vertical = 2
+horizontal_scroll_mode = 0
+vertical_scroll_mode = 1
+mouse_filter = 1
+
+[node name="CharacterGrid" type="GridContainer" parent="CharacterSelectDialog/ScrollContainer"]
+layout_mode = 2
+columns = 6
+theme_override_constants/h_separation = 6
+theme_override_constants/v_separation = 6
+mouse_filter = 1
