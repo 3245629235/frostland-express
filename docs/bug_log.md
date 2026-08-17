@@ -16,6 +16,9 @@
   3. 删除 TrainPhysics 的 120 km/h 上限与 GameConfig.MAX_SPEED_MS，恢复原始 f_tract/f_aero 公式（实测已重新加速至 100+ m/s 并继续增长）。
 - **验证（MCP 实测）**：5 个视差层各 2 tile 存在、Ground y_off=215；TrainContainer 内 2 节车厢精灵（总宽 1849px>1280px）；注入拖拽 press(640)→motion(300)→release 后车厢 x 从 -284 滑至夹取边界 -1209，惯性生效；角色跟随列车位移，点击 (640,520) 可走回。Day 2 的系统/HUD/交互点全部保留。
 - **状态**：✅ 已修复，待用户复测确认。
+- **追加修复（用户复测反馈 2026-08-17）**：
+  1. **车厢图片仍不显示**：TrainContainer（Control）挂在 Node2D 下时锚点不拉伸，宽度算成 0，加上 clip_contents=true 把所有车厢精灵裁掉。修复：_render_train 显式设置 offset_left/right/top/bottom（0~1280）。MCP 验证：容器全局宽 1280，屏幕采样点与车厢贴图像素一致。
+  2. **刹车太慢**：原 BRAKE_DECEL=15 m/s²，且登车界面没有独立刹车按钮（加速按钮只切加速/滑行）。修复：BRAKE_DECEL 提升为 60 m/s²（高速约 2 秒刹停），TopBar 加回「刹车/松开刹车」按钮（mode 2）。MCP 实测：103.8 m/s 点击刹车后 1.2 秒内降至 0。
 
 ## 2026-08-17（Day 1 冒烟）
 

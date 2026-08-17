@@ -89,6 +89,11 @@ custom_minimum_size = Vector2(200, 44)
 layout_mode = 0
 text = "加速"
 
+[node name="BrakeButton" type="Button" parent="HUD/TopBar"]
+custom_minimum_size = Vector2(200, 44)
+layout_mode = 0
+text = "刹车"
+
 [node name="BackButton" type="Button" parent="HUD/TopBar"]
 custom_minimum_size = Vector2(200, 44)
 layout_mode = 0

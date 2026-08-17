@@ -132,6 +132,7 @@ var _action_button: Button = null
 @onready var _hud_status: Label = $HUD/TopBar/StatusLabel
 @onready var _hud_carriage: Label = $HUD/TopBar/CarriageLabel
 @onready var _hud_accel_btn: Button = $HUD/TopBar/AccelButton
+@onready var _hud_brake_btn: Button = $HUD/TopBar/BrakeButton
 @onready var _hud_back_btn: Button = $HUD/TopBar/BackButton
 
 
@@ -163,6 +164,7 @@ func _ready() -> void:
 	_render_train()
 
 	_hud_accel_btn.pressed.connect(_on_accel_button_pressed)
+	_hud_brake_btn.pressed.connect(_on_brake_button_pressed)
 	_hud_back_btn.pressed.connect(_on_back_button_pressed)
 	_build_hud()
 	_update_hud()
@@ -506,6 +508,9 @@ func _render_train() -> void:
 
 	_train_container.visible = true
 	var band: Dictionary = _train_band()
+	# Control 挂在 Node2D 下时锚点不会拉伸，必须显式设置四边，否则 clip 宽度为 0 会把车厢全部裁掉
+	_train_container.offset_left = 0.0
+	_train_container.offset_right = _view_w
 	_train_container.offset_top = band["top"]
 	_train_container.offset_bottom = band["bottom"]
 	_train_container.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -611,7 +616,8 @@ func _update_hud() -> void:
 	if _action_log != "":
 		_hud_status.text += "\n" + _action_log
 	_hud_carriage.text = _carriage_composition_text()
-	_hud_accel_btn.text = "制动/滑行" if GameState.train_control_mode == 1 else "加速"
+	_hud_accel_btn.text = "滑行" if GameState.train_control_mode == 1 else "加速"
+	_hud_brake_btn.text = "松开刹车" if GameState.train_control_mode == 2 else "刹车"
 	_update_resource_bars()
 	_update_character_rows()
 
@@ -731,6 +737,13 @@ func _on_accel_button_pressed() -> void:
 		return
 	GameState.train_control_mode = 1
 	_breakdown_armed = true
+
+
+func _on_brake_button_pressed() -> void:
+	if GameState.train_control_mode == 2:
+		GameState.train_control_mode = 0
+	else:
+		GameState.train_control_mode = 2
 
 
 func _on_back_button_pressed() -> void:

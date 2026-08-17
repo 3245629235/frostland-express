@@ -33,8 +33,8 @@ const FOOD_PER_CHAR_PER_TICK: int = 1
 # ===== 列车物理 =====
 ## 空气阻力系数（乘以速度² = 空气阻力，单位: N）
 const AERO_FACTOR: float = 0.02
-## 刹车减速度（m/s²）
-const BRAKE_DECEL: float = 15.0
+## 刹车减速度（m/s²）——用户反馈原 15 太慢，提升为 60（高速时约 2 秒刹停）
+const BRAKE_DECEL: float = 60.0
 
 # ===== 燃料消耗（DEMO_DESIGN §2.2）=====
 ## 基础燃料消耗（每 CONSUME_INTERVAL 2s，速度>0 时）
