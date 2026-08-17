@@ -61,8 +61,6 @@ const CREW_WALK_TEXTURES = {
 }
 const DEFAULT_CREW_IDS: Array = ["conductor", "laoge", "xiaowang", "xiaoliu"]
 const MAX_CREW: int = 4
-## 角色精灵中心相对脚线的高度（目标身高 180px 的一半）
-const CREW_HALF_HEIGHT: float = 90.0
 
 # 行走图是绿幕素材：用 shader 把绿色背景抠掉
 const CHROMA_KEY_SHADER := """
@@ -87,7 +85,7 @@ const CREW_FORMATION: Array = [
 
 # ===== 可调参数 =====
 @export var walk_speed: float = 250.0
-@export var crew_target_height: float = 180.0
+@export var crew_target_height: float = 140.0
 @export var floor_y_range: Vector2 = Vector2(430, 640)
 
 # ===== 视差/列车状态 =====
@@ -257,7 +255,7 @@ func _setup_crew() -> void:
 		if not ids.has(def_id):
 			ids.append(def_id)
 
-	var base := Vector2(_view_w / 2.0, _floor_y_min - 90.0)  # 角色中心 = 地板线 - 半身高（180px 素材）
+	var base := Vector2(_view_w / 2.0, _floor_y_min - crew_target_height * 0.5)  # 角色中心 = 地板线 - 半身高
 	var chroma := _make_chroma_key_material()
 	for i in range(ids.size()):
 		var id: String = ids[i]
@@ -495,7 +493,7 @@ func _clamp_to_train(p: Vector2) -> Vector2:
 		max_x = _view_w - 40.0
 	return Vector2(
 		clampf(p.x, min_x, max_x),
-		_floor_y_min - CREW_HALF_HEIGHT,
+		_floor_y_min - crew_target_height * 0.5,
 	)
 
 
