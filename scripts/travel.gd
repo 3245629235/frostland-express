@@ -23,7 +23,7 @@ const TRAIN_BOTTOM_OFFSET: float = 75.0
 ## 地板/天花板装饰带收口：让车厢视觉更居中（用户反馈原版地板太低/天花板太高，上轮又过头）
 const CEILING_TOP_OFFSET: float = 30.0
 const CEILING_HEIGHT: float = 18.0
-const FLOOR_BOTTOM_OFFSET: float = 46.0
+const FLOOR_BOTTOM_OFFSET: float = 66.0
 const FLOOR_HEIGHT: float = 30.0
 ## 拖拽惯性衰减
 const INERTIA_DECAY: float = 0.95
@@ -46,9 +46,9 @@ const RESOURCE_NAMES := {
 
 ## 车厢内交互点（2.5）：train_x = 相对列车内容（车厢拼装）的 x，local_y = 相对车厢地板线的 y（全部站在地板上）
 const INTERACTION_POINTS: Array = [
-	{"id": "boiler", "name": "锅炉", "train_x": 380.0, "local_y": 183.0, "color": Color(0.85, 0.35, 0.2), "action": "加煤"},
-	{"id": "cargo", "name": "物资箱", "train_x": 1450.0, "local_y": 183.0, "color": Color(0.55, 0.4, 0.25), "action": "收集物资"},
-	{"id": "repair", "name": "维修台", "train_x": 1680.0, "local_y": 183.0, "color": Color(0.45, 0.5, 0.55), "action": "维修"},
+	{"id": "boiler", "name": "锅炉", "train_x": 380.0, "local_y": 163.0, "color": Color(0.85, 0.35, 0.2), "action": "加煤"},
+	{"id": "cargo", "name": "物资箱", "train_x": 1450.0, "local_y": 163.0, "color": Color(0.55, 0.4, 0.25), "action": "收集物资"},
+	{"id": "repair", "name": "维修台", "train_x": 1680.0, "local_y": 163.0, "color": Color(0.45, 0.5, 0.55), "action": "维修"},
 ]
 const INTERACTION_RADIUS: float = 50.0
 
