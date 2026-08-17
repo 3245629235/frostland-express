@@ -20,6 +20,11 @@ const TRAIN_GROUND_SPEED: float = 0.6
 const TRAIN_HEIGHT_RATIO: float = 0.36
 const TRAIN_BOTTOM_RATIO: float = 0.82
 const TRAIN_BOTTOM_OFFSET: float = 75.0
+## 地板/天花板装饰带收口：让车厢视觉更居中（用户反馈原版地板太低/天花板太高）
+const CEILING_TOP_OFFSET: float = 50.0
+const CEILING_HEIGHT: float = 18.0
+const FLOOR_BOTTOM_OFFSET: float = 16.0
+const FLOOR_HEIGHT: float = 30.0
 ## 拖拽惯性衰减
 const INERTIA_DECAY: float = 0.95
 ## 拖拽判定阈值（px）
@@ -41,9 +46,9 @@ const RESOURCE_NAMES := {
 
 ## 车厢内交互点（2.5）：train_x = 相对列车内容（车厢拼装）的 x，local_y = 相对车厢地板线的 y（全部站在地板上）
 const INTERACTION_POINTS: Array = [
-	{"id": "boiler", "name": "锅炉", "train_x": 380.0, "local_y": 233.0, "color": Color(0.85, 0.35, 0.2), "action": "加煤"},
-	{"id": "cargo", "name": "物资箱", "train_x": 1450.0, "local_y": 233.0, "color": Color(0.55, 0.4, 0.25), "action": "收集物资"},
-	{"id": "repair", "name": "维修台", "train_x": 1680.0, "local_y": 233.0, "color": Color(0.45, 0.5, 0.55), "action": "维修"},
+	{"id": "boiler", "name": "锅炉", "train_x": 380.0, "local_y": 213.0, "color": Color(0.85, 0.35, 0.2), "action": "加煤"},
+	{"id": "cargo", "name": "物资箱", "train_x": 1450.0, "local_y": 213.0, "color": Color(0.55, 0.4, 0.25), "action": "收集物资"},
+	{"id": "repair", "name": "维修台", "train_x": 1680.0, "local_y": 213.0, "color": Color(0.45, 0.5, 0.55), "action": "维修"},
 ]
 const INTERACTION_RADIUS: float = 50.0
 
@@ -289,8 +294,8 @@ func _make_chroma_key_material() -> ShaderMaterial:
 func _setup_carriage_strips() -> void:
 	var band: Dictionary = _train_band()
 	var defs := [
-		{"name": "CeilingStrip", "top": band["top"], "bottom": band["top"] + 18.0, "color": Color(0.10, 0.12, 0.16, 0.7)},
-		{"name": "FloorStrip", "top": band["bottom"] - 26.0, "bottom": band["bottom"], "color": Color(0.08, 0.07, 0.06, 0.8)},
+		{"name": "CeilingStrip", "top": band["top"] + CEILING_TOP_OFFSET, "bottom": band["top"] + CEILING_TOP_OFFSET + CEILING_HEIGHT, "color": Color(0.10, 0.12, 0.16, 0.7)},
+		{"name": "FloorStrip", "top": band["bottom"] - FLOOR_BOTTOM_OFFSET - FLOOR_HEIGHT, "bottom": band["bottom"] - FLOOR_BOTTOM_OFFSET, "color": Color(0.08, 0.07, 0.06, 0.8)},
 	]
 	for d in defs:
 		var poly := Polygon2D.new()
@@ -586,7 +591,7 @@ func _render_train() -> void:
 	_train_container.mouse_filter = Control.MOUSE_FILTER_IGNORE
 
 	# 小人只能在地板线上水平行走（当前无梯子，禁止垂直移动）；脚线 = 地板条上沿
-	_floor_y_min = band["bottom"] - 26.0
+	_floor_y_min = band["bottom"] - FLOOR_BOTTOM_OFFSET - FLOOR_HEIGHT
 	_floor_y_max = _floor_y_min
 
 	var vehicle_sizes: Array = []
