@@ -487,16 +487,12 @@ func _process(delta: float) -> void:
 	for layer in _layers:
 		_scroll_layer(layer, scroll_delta, drag_delta)
 
-	# 交互点钉在列车内容坐标；小队跟随列车拖拽同步移动并保持钳制在车厢内
+	# 交互点钉在列车内容坐标；小队跟随列车拖拽等量位移（不钳制——他们站在列车上，随车厢滑出屏幕是正确表现）
 	_sync_interaction_points()
 	if abs(drag_delta) > 0.001:
 		for member in _crew:
 			(member["sprite"] as Sprite2D).position.x += drag_delta
 		_target_pos.x += drag_delta
-		for member in _crew:
-			var sp: Sprite2D = member["sprite"]
-			sp.position = _clamp_to_train(sp.position)
-		_target_pos = _clamp_to_train(_target_pos)
 
 	# 4. 抛锚检测 + 收集进度 + HUD
 	_check_breakdown()
