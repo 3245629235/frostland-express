@@ -17,7 +17,7 @@ const SCROLL_SPEED_FACTOR: float = 80.0
 ## 列车拖拽与地面视差同速系数（survival 原版）
 const TRAIN_GROUND_SPEED: float = 0.6
 ## 机车可通行区只保留司机室（车尾端比例）；锅炉段禁止小人穿过
-const LOCO_CAB_RATIO: float = 0.25
+const LOCO_CAB_RATIO: float = 0.15
 ## 列车展示区域（survival 原版比例）
 const TRAIN_HEIGHT_RATIO: float = 0.36
 const TRAIN_BOTTOM_RATIO: float = 0.82
