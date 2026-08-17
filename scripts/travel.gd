@@ -16,6 +16,8 @@ const PARALLAX_LAYERS := [
 const SCROLL_SPEED_FACTOR: float = 80.0
 ## 列车拖拽与地面视差同速系数（survival 原版）
 const TRAIN_GROUND_SPEED: float = 0.6
+## 机车可通行区只保留司机室（车尾端比例）；锅炉段禁止小人穿过
+const LOCO_CAB_RATIO: float = 0.25
 ## 列车展示区域（survival 原版比例）
 const TRAIN_HEIGHT_RATIO: float = 0.36
 const TRAIN_BOTTOM_RATIO: float = 0.82
@@ -94,6 +96,8 @@ var _view_w: float = 1280.0
 var _view_h: float = 720.0
 var _train_scroll: float = 0.0
 var _train_total_w: float = 0.0
+var _train_vehicle_sizes: Array = []   # [{type, w, tex, flipped}]
+var _walkable_segments: Array = []     # [[x0, x1], ...] 屏幕坐标可通行区间
 var _dragging_train: bool = false
 var _drag_press_active: bool = false
 var _drag_start_mouse_x: float = -1.0
@@ -483,7 +487,7 @@ func _command_move(point: Vector2) -> void:
 	_is_moving = true
 
 
-## 把目标点钳制到列车内部：x 在「列车内容 ∩ 屏幕可见」范围，y 固定地板线（精灵中心 = 脚线 - 半身高）
+## 把目标点钳制到列车内部可通行区：x 在「列车内容 ∩ 屏幕可见」内再吸附到最近可通行段，y 固定地板线
 func _clamp_to_train(p: Vector2) -> Vector2:
 	var margin: float = 60.0
 	var min_x: float = maxf(_train_scroll + margin, 40.0)
@@ -491,8 +495,9 @@ func _clamp_to_train(p: Vector2) -> Vector2:
 	if max_x < min_x:
 		min_x = 40.0
 		max_x = _view_w - 40.0
+	var visible_x: float = clampf(p.x, min_x, max_x)
 	return Vector2(
-		clampf(p.x, min_x, max_x),
+		_nearest_walkable_x(visible_x),
 		_floor_y_min - crew_target_height * 0.5,
 	)
 
@@ -592,27 +597,81 @@ func _render_train() -> void:
 	_floor_y_min = band["bottom"] - FLOOR_BOTTOM_OFFSET - FLOOR_HEIGHT
 	_floor_y_max = _floor_y_min
 
-	var vehicle_sizes: Array = []
-	_train_total_w = 0.0
-	for c in carriages:
-		var vtype = VehicleTypes.STR_TYPE.get(str(c.get("type", "")))
-		if vtype == null:
-			continue
-		var path: String = VehicleTypes.CONFIG[vtype]["vehicle_path"]
-		var tex: Texture2D = load(path)
-		if tex == null:
-			continue
-		var scale: float = band["height"] / tex.get_height()
-		var w: float = tex.get_width() * scale
-		vehicle_sizes.append({"tex": tex, "w": w, "flipped": bool(c.get("flipped", false))})
-		_train_total_w += w
-
+	var vehicle_sizes: Array = _compute_vehicle_sizes()
 	if vehicle_sizes.is_empty():
 		return
 
+	_train_vehicle_sizes = vehicle_sizes
+	_train_total_w = 0.0
+	for v in vehicle_sizes:
+		_train_total_w += v["w"]
+
 	_train_scroll = (_view_w - _train_total_w) / 2.0
+	_rebuild_walkable_segments()
 	_prev_train_scroll = _train_scroll
 	_apply_train_positions(vehicle_sizes, band["height"])
+
+
+## 统一计算各车厢精灵尺寸（含类型，供可通行区间使用）
+func _compute_vehicle_sizes() -> Array:
+	var band: Dictionary = _train_band()
+	var carriages: Array = GameState.train.get("carriages", [])
+	var sizes: Array = []
+	for c in carriages:
+		var type_str: String = str(c.get("type", ""))
+		var vtype = VehicleTypes.STR_TYPE.get(type_str)
+		if vtype == null:
+			continue
+		var tex: Texture2D = load(VehicleTypes.CONFIG[vtype]["vehicle_path"])
+		if tex == null:
+			continue
+		var scale: float = band["height"] / tex.get_height()
+		sizes.append({
+			"type": type_str,
+			"tex": tex,
+			"w": tex.get_width() * scale,
+			"flipped": bool(c.get("flipped", false)),
+		})
+	return sizes
+
+
+## 可通行区间：普通车厢整节可走；机车只允许司机室（车尾端 25%），锅炉段禁止过人
+func _rebuild_walkable_segments() -> void:
+	_walkable_segments.clear()
+	var x: float = _train_scroll
+	for v in _train_vehicle_sizes:
+		var w: float = v["w"]
+		if v["type"] == "locomotive":
+			_walkable_segments.append([x, x + w * LOCO_CAB_RATIO])
+		else:
+			_walkable_segments.append([x, x + w])
+		x += w
+
+
+## 返回离 target_x 最近的可通行 x（只考虑屏幕内可见的可通行段）
+func _nearest_walkable_x(target_x: float) -> float:
+	if _walkable_segments.is_empty():
+		return target_x
+	var best_x: float = target_x
+	var best_dist: float = INF
+	for seg in _walkable_segments:
+		var lo: float = maxf(seg[0], 40.0)
+		var hi: float = minf(seg[1], _view_w - 40.0)
+		if lo > hi:
+			continue  # 该段当前完全在屏幕外，不吸附
+		if target_x >= lo and target_x <= hi:
+			return target_x
+		var dist: float = 0.0
+		if target_x < lo:
+			dist = lo - target_x
+		else:
+			dist = target_x - hi
+		if dist < best_dist:
+			best_dist = dist
+			best_x = clampf(target_x, lo, hi)
+	if best_dist == INF:
+		return clampf(target_x, 40.0, _view_w - 40.0)
+	return best_x
 
 
 func _apply_train_positions(vehicle_sizes: Array, train_height: float) -> void:
@@ -645,22 +704,17 @@ func _clamp_train_scroll() -> void:
 
 
 func _refresh_train_sprites() -> void:
-	var carriages: Array = GameState.train.get("carriages", [])
-	if carriages.is_empty():
+	if GameState.train.get("carriages", []).is_empty():
 		return
 	var band: Dictionary = _train_band()
-	var vehicle_sizes: Array = []
-	for c in carriages:
-		var vtype = VehicleTypes.STR_TYPE.get(str(c.get("type", "")))
-		if vtype == null:
-			continue
-		var path: String = VehicleTypes.CONFIG[vtype]["vehicle_path"]
-		var tex: Texture2D = load(path)
-		if tex == null:
-			continue
-		var scale: float = band["height"] / tex.get_height()
-		var w: float = tex.get_width() * scale
-		vehicle_sizes.append({"tex": tex, "w": w, "flipped": bool(c.get("flipped", false))})
+	var vehicle_sizes: Array = _compute_vehicle_sizes()
+	if vehicle_sizes.is_empty():
+		return
+	_train_vehicle_sizes = vehicle_sizes
+	_train_total_w = 0.0
+	for v in vehicle_sizes:
+		_train_total_w += v["w"]
+	_rebuild_walkable_segments()
 	_apply_train_positions(vehicle_sizes, band["height"])
 
 
