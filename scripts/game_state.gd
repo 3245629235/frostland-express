@@ -5,6 +5,8 @@ extends Node
 
 enum ResourceType { FOOD, FUEL, MEDICINE, PARTS, AMMO_SMALL, AMMO_LARGE }
 
+const SAVE_VERSION: int = 2
+
 const RESOURCE_STR = {
 	ResourceType.FOOD: "food",
 	ResourceType.FUEL: "fuel",
@@ -43,6 +45,29 @@ var world_consume_time: float = 0.0
 var current_node: String = "station_start"
 var breakdown_count: int = 0  # 燃料耗尽抛锚次数（3 次 → 生存模式失败）
 var crew_positions: Dictionary = {}  # 角色 id -> Vector2，跨场景保留登车位置
+var crew_positions_space: String = "legacy_screen_v1"  # 旧档屏幕坐标；新档使用 train_content_v2
+
+# ===== Day 3 生存进度 =====
+var game_mode: String = "survival"
+var route_distance_km: float = 0.0
+var total_distance_km: float = 0.0
+var route_lap: int = 0
+var next_station_index: int = 0
+var current_station_id: String = "station_start"
+var at_station: bool = false
+var station_collected: bool = false
+var active_effects: Dictionary = {}
+var event_history: Array = []
+var event_time_delay: float = 0.0
+var temporary_member_count: int = 0
+var settlement_result: Dictionary = {}
+var settlement_active: bool = false
+
+# ===== 存档迁移 =====
+var save_version: int = SAVE_VERSION
+var needs_migration: bool = false
+var migration_reason: String = ""
+var migration_backup_path: String = ""
 
 # 0=滑行(仅风阻), 1=加速(满出力), 2=刹车
 var train_control_mode: int = 0
@@ -56,8 +81,8 @@ func _ready() -> void:
 
 func _reset_resources() -> void:
 	resources = {
-		"food": 1000, "fuel": 1000, "medicine": 1000,
-		"parts": 1000, "ammo_small": 1000, "ammo_large": 1000,
+		"food": 1000.0, "fuel": 2000.0, "medicine": 200.0,
+		"parts": 100.0, "ammo_small": 100.0, "ammo_large": 50.0,
 	}
 
 func _reset_train() -> void:
@@ -80,6 +105,25 @@ func full_reset() -> void:
 	train_control_mode = 0
 	breakdown_count = 0
 	crew_positions = {}
+	crew_positions_space = "legacy_screen_v1"
+	game_mode = "survival"
+	route_distance_km = 0.0
+	total_distance_km = 0.0
+	route_lap = 0
+	next_station_index = 0
+	current_station_id = "station_start"
+	at_station = false
+	station_collected = false
+	active_effects = {}
+	event_history = []
+	event_time_delay = 0.0
+	temporary_member_count = 0
+	settlement_result = {}
+	settlement_active = false
+	save_version = SAVE_VERSION
+	needs_migration = false
+	migration_reason = ""
+	migration_backup_path = ""
 
 func reset_resources() -> void:
 	_reset_resources()
@@ -87,14 +131,14 @@ func reset_resources() -> void:
 
 # ===== 资源操作 =====
 func get_resource(type_str: String) -> int:
-	return resources.get(type_str, 0)
+	return int(resources.get(type_str, 0))
 
-func add_resource(type_str: String, amount: int) -> void:
-	resources[type_str] = resources.get(type_str, 0) + amount
+func add_resource(type_str: String, amount: float) -> void:
+	resources[type_str] = float(resources.get(type_str, 0)) + amount
 
-func consume_resource(type_str: String, amount: int) -> bool:
+func consume_resource(type_str: String, amount: float) -> bool:
 	if resources.get(type_str, 0) >= amount:
-		resources[type_str] -= amount
+		resources[type_str] = maxf(0.0, float(resources.get(type_str, 0)) - amount)
 		return true
 	return false
 
@@ -148,18 +192,21 @@ func refresh_train_runtime_state() -> void:
 # ===== 旅行控制 =====
 func start_travel() -> void:
 	is_traveling = true
-	travel_time = 0.0
 	world_consume_time = 0.0
 
 func stop_travel() -> void:
 	is_traveling = false
 	world_consume_time = 0.0
+	train_control_mode = 0
+	train["speed"] = 0.0
 
 
 # ===== 世界推进（每帧）=====
 func tick_world(delta: float, crew_count: int = 0) -> Dictionary:
-	var result = WorldTick.tick_world(delta, crew_count, world_consume_time, train, resources, train_control_mode, is_traveling)
+	var result = WorldTick.tick_world(delta, get_effective_crew_count(crew_count), world_consume_time, train, resources, train_control_mode, is_traveling, active_effects)
 	world_consume_time = result["world_consume_time"]
+	if is_traveling:
+		active_effects = EventSystem.tick_effects(active_effects, delta)
 	_apply_character_ticks(result)
 	return result
 
@@ -190,6 +237,7 @@ func _apply_character_ticks(result: Dictionary) -> void:
 			# 低状态扣血
 			if float(c.get("hunger", 50.0)) < GameConfig.HUNGER_DAMAGE_THRESHOLD:
 				c["health"] = clampf(float(c.get("health", 0.0)) - GameConfig.HEALTH_DAMAGE_PER_TICK, 0.0, float(c.get("max_health", 100.0)))
+			# Day 6 修复：体温低扣血应独立判断（原嵌套在饥饿 if 内，体温低而饥饿正常时不扣血）
 			if float(c.get("temperature", 90.0)) < GameConfig.TEMP_DAMAGE_THRESHOLD:
 				c["health"] = clampf(float(c.get("health", 0.0)) - GameConfig.HEALTH_DAMAGE_PER_TICK, 0.0, float(c.get("max_health", 100.0)))
 			# 自动用药：HP<50% 时消耗 1 药品恢复 20
@@ -199,7 +247,7 @@ func _apply_character_ticks(result: Dictionary) -> void:
 					c["health"] = clampf(float(c.get("health", 0.0)) + GameConfig.AUTO_MEDICINE_HEAL, 0.0, max_hp)
 
 
-func _tick_characters(field: String, delta_value: int, use_max_stamina: bool) -> void:
+func _tick_characters(field: String, delta_value: float, use_max_stamina: bool) -> void:
 	for c in characters:
 		var cur: float = float(c.get(field, 0.0))
 		var cap: float = float(c.get("max_stamina", 100.0)) if use_max_stamina else 100.0
@@ -251,6 +299,36 @@ func get_tender_fuel_levels() -> Array:
 	return levels
 
 
+func get_effective_crew_count(base_count: int) -> int:
+	return max(0, base_count + temporary_member_count)
+
+
+func apply_event_choice(event_id: String, choice_id: String, random_seed: int = 0) -> Dictionary:
+	var state := {
+		"resources": resources,
+		"morale": morale,
+		"train_health": float(train.get("health", 100.0)),
+		"train_max_health": float(train.get("max_health", 100.0)),
+		"characters": characters,
+		"active_effects": active_effects,
+		"temporary_member_count": temporary_member_count,
+		"event_time_delay": event_time_delay,
+		"event_history": event_history,
+	}
+	var result := EventSystem.apply_choice(state, event_id, choice_id, random_seed)
+	if not result.get("ok", false):
+		return result
+	resources = state["resources"]
+	morale = float(state.get("morale", morale))
+	train["health"] = clampf(float(state.get("train_health", train.get("health", 100.0))), 0.0, float(state.get("train_max_health", 100.0)))
+	characters = state["characters"]
+	active_effects = state["active_effects"]
+	temporary_member_count = int(state.get("temporary_member_count", 0))
+	event_time_delay = float(state.get("event_time_delay", 0.0))
+	event_history = state["event_history"]
+	return result
+
+
 # ===== 保存/加载 =====
 func _serialize_crew_positions() -> Dictionary:
 	var out := {}
@@ -269,7 +347,11 @@ func _deserialize_crew_positions(data: Dictionary) -> void:
 
 
 func save_state() -> void:
+	# 旧版/损坏存档等待用户选择时，不允许退出流程静默覆盖原文件。
+	if needs_migration:
+		return
 	var save_data = {
+		"version": SAVE_VERSION,
 		"resources": resources,
 		"characters": characters,
 		"train": train,
@@ -280,6 +362,21 @@ func save_state() -> void:
 		"current_node": current_node,
 		"breakdown_count": breakdown_count,
 		"crew_positions": _serialize_crew_positions(),
+		"crew_positions_space": crew_positions_space,
+		"game_mode": game_mode,
+		"route_distance_km": route_distance_km,
+		"total_distance_km": total_distance_km,
+		"route_lap": route_lap,
+		"next_station_index": next_station_index,
+		"current_station_id": current_station_id,
+		"at_station": at_station,
+		"station_collected": station_collected,
+		"active_effects": active_effects,
+		"event_history": event_history,
+		"event_time_delay": event_time_delay,
+		"temporary_member_count": temporary_member_count,
+		"settlement_result": settlement_result,
+		"settlement_active": settlement_active,
 	}
 	var file = FileAccess.open("user://game_state.json", FileAccess.WRITE)
 	if file:
@@ -295,8 +392,23 @@ func load_state() -> bool:
 	var content = file.get_as_text()
 	file.close()
 	var data = JSON.parse_string(content)
-	if data == null:
+	if data == null or not (data is Dictionary):
+		_mark_migration("存档文件损坏，无法解析")
+		_backup_save("corrupt")
 		return false
+	var version := int(data.get("version", 1))
+	if version > SAVE_VERSION:
+		_mark_migration("存档版本高于当前版本（v%d）" % version)
+		_backup_save("future")
+		return false
+	if data.has("train") and not (data["train"] is Dictionary):
+		_mark_migration("存档列车数据无效")
+		_backup_save("invalid")
+		return false
+	if version < SAVE_VERSION:
+		_mark_migration("检测到旧版存档（v%d）" % version)
+		_backup_save("legacy")
+	save_version = SAVE_VERSION
 	if data.has("resources"):
 		resources = data["resources"]
 	if data.has("characters"):
@@ -317,8 +429,60 @@ func load_state() -> bool:
 		breakdown_count = int(data["breakdown_count"])
 	if data.has("crew_positions"):
 		_deserialize_crew_positions(data["crew_positions"])
+	if data.has("crew_positions_space"):
+		crew_positions_space = str(data["crew_positions_space"])
+	game_mode = str(data.get("game_mode", game_mode))
+	route_distance_km = float(data.get("route_distance_km", 0.0))
+	total_distance_km = float(data.get("total_distance_km", route_distance_km))
+	route_lap = int(data.get("route_lap", 0))
+	next_station_index = int(data.get("next_station_index", 0))
+	current_station_id = str(data.get("current_station_id", current_station_id))
+	at_station = bool(data.get("at_station", false))
+	station_collected = bool(data.get("station_collected", false))
+	active_effects = data.get("active_effects", {}) if data.get("active_effects", {}) is Dictionary else {}
+	event_history = data.get("event_history", []) if data.get("event_history", []) is Array else []
+	event_time_delay = float(data.get("event_time_delay", 0.0))
+	temporary_member_count = int(data.get("temporary_member_count", 0))
+	settlement_result = data.get("settlement_result", {}) if data.get("settlement_result", {}) is Dictionary else {}
+	settlement_active = bool(data.get("settlement_active", false))
 	refresh_train_runtime_state()
 	return true
+
+
+func has_pending_migration() -> bool:
+	return needs_migration
+
+
+func accept_migration(continue_compatible: bool) -> void:
+	if continue_compatible:
+		needs_migration = false
+		migration_reason = ""
+		save_state()
+	else:
+		full_reset()
+		save_state()
+
+
+func _mark_migration(reason: String) -> void:
+	needs_migration = true
+	migration_reason = reason
+	save_version = SAVE_VERSION
+
+
+func _backup_save(label: String) -> void:
+	if not FileAccess.file_exists("user://game_state.json"):
+		return
+	var source := FileAccess.open("user://game_state.json", FileAccess.READ)
+	if source == null:
+		return
+	var content := source.get_as_text()
+	source.close()
+	var backup_path := "user://game_state.json.%s.bak" % label
+	var backup := FileAccess.open(backup_path, FileAccess.WRITE)
+	if backup != null:
+		backup.store_string(content)
+		backup.close()
+	migration_backup_path = backup_path
 
 func _exit_tree() -> void:
 	save_state()

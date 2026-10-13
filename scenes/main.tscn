@@ -4,6 +4,13 @@
 [ext_resource type="Texture2D" uid="uid://0snrnvx18wvo" path="res://assets/sprites/game_background.jpg" id="2"]
 [ext_resource type="Texture2D" uid="uid://d12kvehlio41e" path="res://assets/sprites/conductor.png" id="3"]
 [ext_resource type="Theme" path="res://assets/themes/default_theme.tres" id="4"]
+[ext_resource type="Texture2D" path="res://assets/ui/icons/icon_food.svg" id="5_iconfood"]
+[ext_resource type="Texture2D" path="res://assets/ui/icons/icon_fuel.svg" id="6_iconfuel"]
+[ext_resource type="Texture2D" path="res://assets/ui/icons/icon_medicine.svg" id="7_iconmed"]
+[ext_resource type="Texture2D" path="res://assets/ui/icons/icon_parts.svg" id="8_iconparts"]
+[ext_resource type="Texture2D" path="res://assets/ui/icons/icon_couple.svg" id="9_iconcouple"]
+[ext_resource type="Texture2D" path="res://assets/ui/icons/icon_board.svg" id="10_iconboard"]
+[ext_resource type="Texture2D" path="res://assets/ui/icons/icon_crew.svg" id="11_iconcrew"]
 
 [node name="Main" type="Control" unique_id=2054739318]
 layout_mode = 3
@@ -43,60 +50,166 @@ expand_mode = 1
 stretch_mode = 5
 
 [node name="ResourcePanel" type="Panel" parent="." unique_id=895284115]
-custom_minimum_size = Vector2(0, 60)
+custom_minimum_size = Vector2(0, 0)
 layout_mode = 1
 anchors_preset = -1
-anchor_left = 0.5
-anchor_right = 1.0
-offset_bottom = 60.0
+anchor_left = 0.0
+anchor_top = 0.0
+anchor_right = 0.0
+anchor_bottom = 0.0
+offset_left = 12.0
+offset_top = 88.0
+offset_right = 177.0
+offset_bottom = 348.0
 grow_horizontal = 2
 
-[node name="ResourceGrid" type="HBoxContainer" parent="ResourcePanel" unique_id=976803357]
+[node name="ResourceGrid" type="VBoxContainer" parent="ResourcePanel" unique_id=976803357]
 layout_mode = 1
 anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
-offset_left = 20.0
-offset_top = 5.0
-offset_right = -20.0
-offset_bottom = -5.0
+offset_left = 12.0
+offset_top = 12.0
+offset_right = -12.0
+offset_bottom = -12.0
 grow_horizontal = 2
 grow_vertical = 2
+theme_override_constants/separation = 16
 alignment = 1
 
-[node name="Food" type="VBoxContainer" parent="ResourcePanel/ResourceGrid" unique_id=1497824049]
+[node name="Food" type="HBoxContainer" parent="ResourcePanel/ResourceGrid" unique_id=1497824049]
 layout_mode = 2
+theme_override_constants/separation = 9
+alignment = 1
 
-[node name="FoodLabel" type="Label" parent="ResourcePanel/ResourceGrid/Food" unique_id=1922872259]
+[node name="FoodIcon" type="TextureRect" parent="ResourcePanel/ResourceGrid/Food" unique_id=91101]
+custom_minimum_size = Vector2(36, 36)
 layout_mode = 2
-text = "食物: 100 (-0/s)"
-horizontal_alignment = 1
+texture = ExtResource("5_iconfood")
+expand_mode = 1
+stretch_mode = 5
 
-[node name="Fuel" type="VBoxContainer" parent="ResourcePanel/ResourceGrid" unique_id=1616133327]
+[node name="FoodBox" type="VBoxContainer" parent="ResourcePanel/ResourceGrid/Food" unique_id=91102]
+custom_minimum_size = Vector2(58, 0)
 layout_mode = 2
+theme_override_constants/separation = 0
+alignment = 1
 
-[node name="FuelLabel" type="Label" parent="ResourcePanel/ResourceGrid/Fuel" unique_id=2107690679]
+[node name="FoodTitle" type="Label" parent="ResourcePanel/ResourceGrid/Food/FoodBox" unique_id=91103]
 layout_mode = 2
-text = "燃料: 80 (-0/s)"
-horizontal_alignment = 1
+theme_override_colors/font_color = Color(0.72, 0.62, 0.45, 1)
+theme_override_font_sizes/font_size = 12
+text = "食物"
+horizontal_alignment = 0
 
-[node name="Medicine" type="VBoxContainer" parent="ResourcePanel/ResourceGrid" unique_id=74158050]
+[node name="FoodLabel" type="Label" parent="ResourcePanel/ResourceGrid/Food/FoodBox" unique_id=1922872259]
 layout_mode = 2
+theme_override_font_sizes/font_size = 20
+text = "100"
+horizontal_alignment = 0
 
-[node name="MedicineLabel" type="Label" parent="ResourcePanel/ResourceGrid/Medicine" unique_id=1747222814]
+[node name="Fuel" type="HBoxContainer" parent="ResourcePanel/ResourceGrid" unique_id=1616133327]
 layout_mode = 2
-text = "药品: 30 (-0/s)"
-horizontal_alignment = 1
+theme_override_constants/separation = 9
+alignment = 1
 
-[node name="Parts" type="VBoxContainer" parent="ResourcePanel/ResourceGrid" unique_id=1591700548]
+[node name="FuelIcon" type="TextureRect" parent="ResourcePanel/ResourceGrid/Fuel" unique_id=91104]
+custom_minimum_size = Vector2(36, 36)
 layout_mode = 2
+texture = ExtResource("6_iconfuel")
+expand_mode = 1
+stretch_mode = 5
 
-[node name="PartsLabel" type="Label" parent="ResourcePanel/ResourceGrid/Parts" unique_id=1893227097]
+[node name="FuelBox" type="VBoxContainer" parent="ResourcePanel/ResourceGrid/Fuel" unique_id=91105]
+custom_minimum_size = Vector2(108, 0)
 layout_mode = 2
-text = "零件: 50 (-0/s)"
-horizontal_alignment = 1
+theme_override_constants/separation = 0
+alignment = 1
+
+[node name="FuelTitle" type="Label" parent="ResourcePanel/ResourceGrid/Fuel/FuelBox" unique_id=91106]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.72, 0.62, 0.45, 1)
+theme_override_font_sizes/font_size = 12
+text = "燃料"
+horizontal_alignment = 0
+
+[node name="FuelLabel" type="Label" parent="ResourcePanel/ResourceGrid/Fuel/FuelBox" unique_id=2107690679]
+layout_mode = 2
+theme_override_font_sizes/font_size = 20
+text = "80"
+horizontal_alignment = 0
+
+[node name="FuelRate" type="Label" parent="ResourcePanel/ResourceGrid/Fuel/FuelBox" unique_id=91107]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.55, 0.6, 0.55, 1)
+theme_override_font_sizes/font_size = 11
+text = "油耗 -"
+horizontal_alignment = 0
+
+[node name="Medicine" type="HBoxContainer" parent="ResourcePanel/ResourceGrid" unique_id=74158050]
+layout_mode = 2
+theme_override_constants/separation = 9
+alignment = 1
+
+[node name="MedicineIcon" type="TextureRect" parent="ResourcePanel/ResourceGrid/Medicine" unique_id=91108]
+custom_minimum_size = Vector2(36, 36)
+layout_mode = 2
+texture = ExtResource("7_iconmed")
+expand_mode = 1
+stretch_mode = 5
+
+[node name="MedicineBox" type="VBoxContainer" parent="ResourcePanel/ResourceGrid/Medicine" unique_id=91109]
+custom_minimum_size = Vector2(58, 0)
+layout_mode = 2
+theme_override_constants/separation = 0
+alignment = 1
+
+[node name="MedicineTitle" type="Label" parent="ResourcePanel/ResourceGrid/Medicine/MedicineBox" unique_id=91110]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.72, 0.62, 0.45, 1)
+theme_override_font_sizes/font_size = 12
+text = "药品"
+horizontal_alignment = 0
+
+[node name="MedicineLabel" type="Label" parent="ResourcePanel/ResourceGrid/Medicine/MedicineBox" unique_id=1747222814]
+layout_mode = 2
+theme_override_font_sizes/font_size = 20
+text = "30"
+horizontal_alignment = 0
+
+[node name="Parts" type="HBoxContainer" parent="ResourcePanel/ResourceGrid" unique_id=1591700548]
+layout_mode = 2
+theme_override_constants/separation = 9
+alignment = 1
+
+[node name="PartsIcon" type="TextureRect" parent="ResourcePanel/ResourceGrid/Parts" unique_id=91111]
+custom_minimum_size = Vector2(36, 36)
+layout_mode = 2
+texture = ExtResource("8_iconparts")
+expand_mode = 1
+stretch_mode = 5
+
+[node name="PartsBox" type="VBoxContainer" parent="ResourcePanel/ResourceGrid/Parts" unique_id=91112]
+custom_minimum_size = Vector2(58, 0)
+layout_mode = 2
+theme_override_constants/separation = 0
+alignment = 1
+
+[node name="PartsTitle" type="Label" parent="ResourcePanel/ResourceGrid/Parts/PartsBox" unique_id=91113]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.72, 0.62, 0.45, 1)
+theme_override_font_sizes/font_size = 12
+text = "零件"
+horizontal_alignment = 0
+
+[node name="PartsLabel" type="Label" parent="ResourcePanel/ResourceGrid/Parts/PartsBox" unique_id=1893227097]
+layout_mode = 2
+theme_override_font_sizes/font_size = 20
+text = "50"
+horizontal_alignment = 0
 
 [node name="DebugPanel" type="Panel" parent="." unique_id=1844100036]
+visible = false
 custom_minimum_size = Vector2(200, 400)
 layout_mode = 1
 anchors_preset = 2
@@ -210,14 +323,17 @@ anchor_left = 1.0
 anchor_top = 0.5
 anchor_right = 1.0
 anchor_bottom = 0.5
-offset_left = -180.0
-offset_top = -260.0
+offset_left = -230.0
+offset_top = -222.0
 offset_right = -30.0
-offset_bottom = -200.0
+offset_bottom = -146.0
 grow_horizontal = 0
-grow_vertical = 2
-theme_override_font_sizes/font_size = 28
+grow_vertical = 0
+theme_override_font_sizes/font_size = 26
+icon = ExtResource("9_iconcouple")
+icon_max_width = 26
 text = "编组"
+alignment = 1
 
 [node name="BoardButton" type="Button" parent="." unique_id=2002]
 layout_mode = 1
@@ -226,14 +342,17 @@ anchor_left = 1.0
 anchor_top = 0.5
 anchor_right = 1.0
 anchor_bottom = 0.5
-offset_left = -180.0
-offset_top = -190.0
+offset_left = -230.0
+offset_top = -138.0
 offset_right = -30.0
-offset_bottom = -130.0
+offset_bottom = -62.0
 grow_horizontal = 0
 grow_vertical = 0
-theme_override_font_sizes/font_size = 28
+theme_override_font_sizes/font_size = 26
+icon = ExtResource("10_iconboard")
+icon_max_width = 26
 text = "登车"
+alignment = 1
 
 [node name="TeamSelectButton" type="Button" parent="." unique_id=2003]
 layout_mode = 1
@@ -242,11 +361,14 @@ anchor_left = 1.0
 anchor_top = 0.5
 anchor_right = 1.0
 anchor_bottom = 0.5
-offset_left = -180.0
-offset_top = -120.0
+offset_left = -230.0
+offset_top = -54.0
 offset_right = -30.0
-offset_bottom = -60.0
+offset_bottom = 22.0
 grow_horizontal = 0
 grow_vertical = 0
-theme_override_font_sizes/font_size = 28
+theme_override_font_sizes/font_size = 26
+icon = ExtResource("11_iconcrew")
+icon_max_width = 26
 text = "人员编成"
+alignment = 1

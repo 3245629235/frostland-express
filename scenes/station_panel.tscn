@@ -1,0 +1,68 @@
+[gd_scene format=3]
+
+[ext_resource type="Script" path="res://scripts/station_panel.gd" id="1_station"]
+
+[node name="StationPanel" type="PanelContainer"]
+custom_minimum_size = Vector2(760, 280)
+mouse_filter = 0
+script = ExtResource("1_station")
+
+[node name="Margin" type="MarginContainer" parent="."]
+layout_mode = 2
+theme_override_constants/margin_left = 24
+theme_override_constants/margin_top = 18
+theme_override_constants/margin_right = 24
+theme_override_constants/margin_bottom = 18
+
+[node name="VBox" type="VBoxContainer" parent="Margin"]
+layout_mode = 2
+theme_override_constants/separation = 10
+
+[node name="Title" type="Label" parent="Margin/VBox"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 24
+text = "站点"
+horizontal_alignment = 1
+
+[node name="Info" type="Label" parent="Margin/VBox"]
+layout_mode = 2
+text = "站点信息"
+horizontal_alignment = 1
+
+[node name="Message" type="Label" parent="Margin/VBox"]
+layout_mode = 2
+custom_minimum_size = Vector2(0, 40)
+text = "操作结果"
+autowrap_mode = 2
+horizontal_alignment = 1
+
+[node name="Progress" type="ProgressBar" parent="Margin/VBox"]
+visible = false
+layout_mode = 2
+custom_minimum_size = Vector2(0, 22)
+show_percentage = false
+
+[node name="Actions" type="HBoxContainer" parent="Margin/VBox"]
+layout_mode = 2
+theme_override_constants/separation = 8
+alignment = 1
+
+[node name="CollectButton" type="Button" parent="Margin/VBox/Actions"]
+custom_minimum_size = Vector2(160, 48)
+layout_mode = 2
+text = "停留收集"
+
+[node name="RepairButton" type="Button" parent="Margin/VBox/Actions"]
+custom_minimum_size = Vector2(160, 48)
+layout_mode = 2
+text = "维修"
+
+[node name="SupplyButton" type="Button" parent="Margin/VBox/Actions"]
+custom_minimum_size = Vector2(160, 48)
+layout_mode = 2
+text = "补给"
+
+[node name="ContinueButton" type="Button" parent="Margin/VBox/Actions"]
+custom_minimum_size = Vector2(160, 48)
+layout_mode = 2
+text = "继续行驶"

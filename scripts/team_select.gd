@@ -36,6 +36,7 @@ var _target_positions: Array = []
 var _drag_start_y: float = 0.0
 
 func _ready() -> void:
+	AudioManager.play_bgm("main")
 	back_btn.pressed.connect(_on_back_clicked)
 	confirm_btn.pressed.connect(_on_confirm_clicked)
 	$LeftPanel/TeamList/Team1Btn.pressed.connect(func(): _switch_echelon(1))
@@ -350,7 +351,7 @@ func _create_drag_preview(char_data: Dictionary) -> Control:
 	preview.mouse_filter = MOUSE_FILTER_IGNORE
 	return preview
 
-func _on_drag_ended(card: CharacterCard) -> void:
+func _on_drag_ended(_card: CharacterCard) -> void:
 	if not _drag_card or _drag_index < 0:
 		return
 
@@ -436,6 +437,7 @@ func _save_team() -> void:
 	GameState.save_state()
 
 func _on_back_clicked() -> void:
+	AudioManager.play_back()
 	var echelon_chars = _get_echelon_characters(current_echelon)
 	if echelon_chars.size() == 0 or echelon_chars[0] == null:
 		_show_no_captain_warning()
@@ -444,5 +446,6 @@ func _on_back_clicked() -> void:
 	get_tree().change_scene_to_file("res://scenes/main.tscn")
 
 func _on_confirm_clicked() -> void:
+	AudioManager.play_click()
 	_save_team()
 	get_tree().change_scene_to_file("res://scenes/main.tscn")

@@ -1,5 +1,7 @@
 extends Control
 
+const SAVE_MIGRATION_DIALOG_SCENE: PackedScene = preload("res://scenes/save_migration_dialog.tscn")
+
 var portrait_textures: Array[Texture2D] = []
 var current_portrait_index: int = 0
 var is_dragging: bool = false
@@ -11,10 +13,11 @@ var has_swiped: bool = false
 @onready var team_button: Button = $TeamButton
 @onready var board_button: Button = $BoardButton
 @onready var team_select_button: Button = $TeamSelectButton
-@onready var food_label: Label = $ResourcePanel/ResourceGrid/Food/FoodLabel
-@onready var fuel_label: Label = $ResourcePanel/ResourceGrid/Fuel/FuelLabel
-@onready var medicine_label: Label = $ResourcePanel/ResourceGrid/Medicine/MedicineLabel
-@onready var parts_label: Label = $ResourcePanel/ResourceGrid/Parts/PartsLabel
+@onready var food_label: Label = $ResourcePanel/ResourceGrid/Food/FoodBox/FoodLabel
+@onready var fuel_label: Label = $ResourcePanel/ResourceGrid/Fuel/FuelBox/FuelLabel
+@onready var fuel_rate_label: Label = $ResourcePanel/ResourceGrid/Fuel/FuelBox/FuelRate
+@onready var medicine_label: Label = $ResourcePanel/ResourceGrid/Medicine/MedicineBox/MedicineLabel
+@onready var parts_label: Label = $ResourcePanel/ResourceGrid/Parts/PartsBox/PartsLabel
 @onready var train_warning: Label = $TrainWarning
 
 @onready var add_food_btn: Button = $DebugPanel/DebugGrid/FoodButtons/AddFoodBtn
@@ -29,6 +32,9 @@ var has_swiped: bool = false
 @onready var debug_log: Label = $DebugPanel/DebugGrid/DebugLog
 
 func _ready() -> void:
+	# 主界面不是旅行场景：清除旧档遗留的旅行标记，避免后台继续消耗资源
+	GameState.stop_travel()
+	AudioManager.play_bgm("main")
 	_load_portraits()
 	_update_portrait()
 	team_button.pressed.connect(_on_team_button_pressed)
@@ -42,8 +48,12 @@ func _ready() -> void:
 	reset_btn.pressed.connect(_on_reset_pressed)
 
 	_update_resource_ui()
+	if GameState.has_pending_migration():
+		call_deferred("_show_save_migration_dialog")
 
 func _process(delta: float) -> void:
+	if GameState.has_pending_migration():
+		return
 	GameState.tick_world(delta, _get_world_character_count())
 	_update_resource_ui()
 	if train_warning:
@@ -57,16 +67,19 @@ func _update_resource_ui() -> void:
 	var speed = GameState.get_train_speed()
 	var speed_kmh = int(speed * 3.6)
 
-	food_label.text = "食物: %d" % GameState.get_resource("food")
-	fuel_label.text = "燃料: %d | 油耗: %.2f/s | 速度: %d km/h" % [GameState.get_resource("fuel"), fuel_rate_display, speed_kmh]
-	medicine_label.text = "药品: %d" % GameState.get_resource("medicine")
-	parts_label.text = "零件: %d" % GameState.get_resource("parts")
+	food_label.text = str(GameState.get_resource("food"))
+	fuel_label.text = str(GameState.get_resource("fuel"))
+	fuel_rate_label.text = "油耗 %.2f/s" % fuel_rate_display
+	medicine_label.text = str(GameState.get_resource("medicine"))
+	parts_label.text = str(GameState.get_resource("parts"))
 
 func _on_team_button_pressed() -> void:
 	GameState.save_state()
 	get_tree().change_scene_to_file("res://scenes/team.tscn")
 
 func _on_board_button_pressed() -> void:
+	if GameState.has_pending_migration():
+		return
 	var carriages = GameState.train.get("carriages", [])
 	# BUG-001 兜底：GameState 为空但旧版 train_save.json 有编组时自动迁移
 	if carriages.is_empty() and TrainSave.migrate_legacy_train_save():
@@ -82,6 +95,9 @@ func _on_board_button_pressed() -> void:
 	get_tree().change_scene_to_file("res://scenes/travel.tscn")
 
 func _on_team_select_button_pressed() -> void:
+	if GameState.has_pending_migration():
+		return
+	AudioManager.play_click()
 	GameState.save_state()
 	get_tree().change_scene_to_file("res://scenes/team_select.tscn")
 
@@ -92,6 +108,23 @@ func _show_popup(title: String, message: String) -> void:
 	dialog.size = Vector2(400, 150)
 	add_child(dialog)
 	dialog.popup_centered()
+
+
+func _show_save_migration_dialog() -> void:
+	var dialog := SAVE_MIGRATION_DIALOG_SCENE.instantiate() as SaveMigrationDialog
+	if dialog == null:
+		return
+	dialog.name = "SaveMigrationDialog"
+	add_child(dialog)
+	dialog.decision.connect(_on_save_migration_decision.bind(dialog))
+	dialog.setup(GameState.migration_reason, GameState.migration_backup_path)
+
+
+func _on_save_migration_decision(continue_compatible: bool, dialog: SaveMigrationDialog) -> void:
+	GameState.accept_migration(continue_compatible)
+	if is_instance_valid(dialog):
+		dialog.queue_free()
+	_update_resource_ui()
 
 func _load_portraits() -> void:
 	var paths := [
@@ -134,6 +167,9 @@ func _input(event: InputEvent) -> void:
 			_next_portrait()
 		elif event.keycode == KEY_LEFT:
 			_prev_portrait()
+		elif event.keycode == KEY_F3:
+			var panel: Panel = $DebugPanel
+			panel.visible = not panel.visible
 
 func _is_point_in_conductor(point: Vector2) -> bool:
 	var rect: Rect2 = conductor.get_global_rect()

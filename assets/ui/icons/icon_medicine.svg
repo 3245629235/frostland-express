@@ -1,0 +1,14 @@
+<svg width="64" height="64" viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg">
+  <!-- 药品图标：圆肚药瓶 + 红十字 -->
+  <defs>
+    <linearGradient id="g1" x1="0" y1="0" x2="0.6" y2="1">
+      <stop offset="0" stop-color="#7FB8A0"/>
+      <stop offset="1" stop-color="#3E6E58"/>
+    </linearGradient>
+  </defs>
+  <rect x="24" y="12" width="16" height="7" rx="2.5" fill="#8C8C93" stroke="#F5D9A0" stroke-width="1.4"/>
+  <rect x="26" y="19" width="12" height="5" fill="#4A4F5A"/>
+  <path d="M20 24 h24 c3.4 0 6 2.6 6 6 v22 c0 3.4 -2.6 6 -6 6 H20 c-3.4 0 -6 -2.6 -6 -6 V30 c0 -3.4 2.6 -6 6 -6 Z" fill="url(#g1)" stroke="#F5D9A0" stroke-width="1.6"/>
+  <path d="M32 31 v14 M25 38 h14" stroke="#FFF6E3" stroke-width="5.2" stroke-linecap="round" fill="none"/>
+  <path d="M22 28 h20" stroke="#9FD8BE" stroke-width="1.6" opacity="0.6"/>
+</svg>

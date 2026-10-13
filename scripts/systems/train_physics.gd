@@ -17,7 +17,7 @@ static func recalc_train_stats(train: Dictionary) -> void:
 	train["total_mass"] = total_mass
 
 ## 每帧更新列车速度（mode: 0=滑行, 1=加速, 2=刹车）
-static func update_physics(delta: float, train: Dictionary, mode: int = 0) -> void:
+static func update_physics(delta: float, train: Dictionary, mode: int = 0, speed_multiplier: float = 1.0) -> void:
 	var carriages = train.get("carriages", [])
 	if carriages.is_empty():
 		train["speed"] = 0.0
@@ -74,4 +74,8 @@ static func update_physics(delta: float, train: Dictionary, mode: int = 0) -> vo
 
 	if speed < 0:
 		speed = 0.0
+	if speed_multiplier < 1.0:
+		# 事件减速采用临时速度上限，不影响事件结束后的正常加速曲线。
+		var temporary_cap: float = 100.0 * maxf(speed_multiplier, 0.1) / 3.6
+		speed = minf(speed, temporary_cap)
 	train["speed"] = speed

@@ -1,0 +1,9 @@
+<svg width="64" height="64" viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg">
+  <!-- 人员编成图标：双人 -->
+  <g fill="#1B2330" stroke="#E4C67E" stroke-width="2.2">
+    <circle cx="21" cy="17" r="8"/>
+    <circle cx="45" cy="21" r="6.5"/>
+    <path d="M7 50 c0 -11 6.5 -16 14 -16 s14 5 14 16 Z"/>
+    <path d="M32 50 c0 -9.5 5.5 -14 13 -14 s13 4.5 13 14 Z"/>
+  </g>
+</svg>

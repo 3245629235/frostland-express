@@ -52,7 +52,7 @@ static func migrate_legacy_train_save() -> bool:
 	return true
 
 ## 保存：序列化 placed_vehicles → 同步到 GameState
-static func save_train(placed_vehicles: Array, player_inventory: Dictionary, vehicle_data: Dictionary) -> void:
+static func save_train(placed_vehicles: Array, _player_inventory: Dictionary, _vehicle_data: Dictionary) -> void:
 	var carriages: Array = []
 	for v in placed_vehicles:
 		carriages.append({"type": v.type, "flipped": v.flipped})

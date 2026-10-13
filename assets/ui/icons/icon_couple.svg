@@ -1,0 +1,13 @@
+<svg width="64" height="64" viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg">
+  <!-- 编组图标：两节车厢相连 -->
+  <g stroke="#E4C67E" stroke-width="2.2" fill="none" stroke-linejoin="round">
+    <rect x="4" y="20" width="22" height="26" rx="3" fill="#1B2330"/>
+    <rect x="38" y="20" width="22" height="26" rx="3" fill="#1B2330"/>
+    <path d="M26 33 h12"/>
+    <path d="M24 27 h6 M26 39 h6 M40 27 h6 M42 39 h6" stroke-width="2.6"/>
+  </g>
+  <circle cx="8.5" cy="52" r="4.6" fill="#1B2330" stroke="#E4C67E" stroke-width="2"/>
+  <circle cx="20.5" cy="52" r="4.6" fill="#1B2330" stroke="#E4C67E" stroke-width="2"/>
+  <circle cx="43.5" cy="52" r="4.6" fill="#1B2330" stroke="#E4C67E" stroke-width="2"/>
+  <circle cx="55.5" cy="52" r="4.6" fill="#1B2330" stroke="#E4C67E" stroke-width="2"/>
+</svg>

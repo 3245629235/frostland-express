@@ -628,7 +628,9 @@ enum Type { LOCOMOTIVE, COAL_TENDER, PASSENGER, OPEN_CAR, TANK_CAR, SERVICE_CAR,
 - **触发时机：**
   - 场景退出时自动（`_exit_tree()`）
   - 切换场景前手动调用
-- **内容：** resources, characters, train, morale, is_traveling, travel_time, current_node
+- **内容：** resources, characters, train, morale, is_traveling, travel_time, current_node；Day 3 另存路线里程/圈数/站点、事件历史/临时效果、结算摘要和 `version: 2`
+- **旧档处理：** 缺少版本号或版本低于 2 时备份为 `game_state.json.legacy.bak`，主界面显示兼容继续/重置提示；高版本、损坏 JSON 或无效列车数据先备份并阻止静默覆盖
+- **完整重置：** `full_reset()` 清空旅行、站点、事件、结算和角色/列车运行状态，再写入 v2 新档
 
 ### 列车编组保存
 
@@ -636,6 +638,18 @@ enum Type { LOCOMOTIVE, COAL_TENDER, PASSENGER, OPEN_CAR, TANK_CAR, SERVICE_CAR,
 - **触发时机：** 每次放置/回收/清除操作后
 - **内容：** placed_vehicles（类型+翻转状态）, inventory（库存）
 - **校验：** 加载时校验 `库存 + 已放置 == 初始总量`，损坏则重置
+
+### Day 3 生存闭环
+
+**Travel 文件：** `scripts/travel.gd`
+**场景：** `scenes/travel.tscn`
+
+- **事件数据：** `scripts/events_data.gd` 定义 E1～E8 和权重；`scripts/systems/event_system.gd` 负责按权重选择、资源扣除、选项后果和临时效果过期。
+- **事件界面：** `scenes/event_dialog.tscn` / `scripts/event_dialog.gd`。事件面板打开时暂停世界推进，选项只允许结算一次。
+- **站点数据：** `scripts/station_data.gd` 定义白桦林站 80 km、冻湖站 180 km、铁岭口 300 km、极光城 420 km；`scripts/systems/station_system.gd` 负责门槛、维修折扣、补给和折返。
+- **站点界面：** `scenes/station_panel.tscn` / `scripts/station_panel.gd`，提供收集、维修、补给、继续行驶四项操作；中间站离站保留当前路线里程，极光城折返时路线里程归零并增加圈数。
+- **结算：** `scripts/systems/settlement_system.gd` 判断列车损毁、全员倒下、抛锚 3 次；`scenes/defeat.tscn` 展示失败统计，`scenes/victory.tscn` 为剧情模式预留通用完成页。
+- **测试：** `tests/day3_logic_test.gd` 可用 Godot headless 运行；`tools/day3_smoke.py` 用于 Godot AI MCP 真窗口回归。
 
 ---
 
@@ -668,8 +682,31 @@ enum Type { LOCOMOTIVE, COAL_TENDER, PASSENGER, OPEN_CAR, TANK_CAR, SERVICE_CAR,
 
 | 预设 | 平台 | 导出路径 | 备注 |
 |------|------|----------|------|
-| Android | arm64-v8a | `Desktop/游戏安装包/project.ST.apk` | 签名、沉浸模式 |
+| Android | arm64-v8a | `dist/FrostlandExpress.apk` | 包名 com.frostland.express、versionName 0.1.0、release 签名（keystores/release.keystore）、沉浸模式 |
 | Web | — | 未配置 | 单线程 |
+| Windows Desktop | x86_64 | `dist/FrostlandExpress.exe` | 正式版发布用 |
+
+> 导出流程（Day 6）：先复制项目到临时副本工程，删除 `addons/godot_ai` 与 project.godot 中的 `_mcp_game_helper` autoload、`[editor_plugins]` 段，再对副本执行 `--export-release`（避免把调试插件打进包）。
+
+> Day 7：流程已脚本化为 `tools/export_release.py`（一键导出 APK + exe，自动剔除调试插件）；应用图标由 `tools/generate_app_icon.py` 生成（assets/icon_*.png），启动画面已禁用 Godot 标志。
+
+### Day 6 平衡数值速查（2026-08-22）
+
+| 项 | 值 | 说明 |
+|----|----|------|
+| TIME_COMPRESSION | 3.0 | 现实 1 秒 = 游戏 3 秒，里程按游戏时间折算（travel.gd 里程行 ×3） |
+| 食物消耗 | 0.2/人/tick | 4 人 30 分钟 ≈ 720，初始 1000 形成压力曲线 |
+| 油耗 | 1.0/tick（>60km/h ×1.5） | 初始燃料 1500 撑 30 分钟高速 |
+| 体温/饥饿/体力 | 行驶 -0.25 / -0.5 / -0.5 | 体温约 8 分钟跌破 30 开始扣血（中段紧张） |
+| 初始资源 | food 1000 / fuel 1500 / medicine 200 / parts 100 / ammo 100+50 | DEMO_DESIGN §2.1 |
+| 站收集 | 食物 30~60、燃料 20~40 | 后段补给翻盘点 |
+| 战斗射速 | 1 发/秒（FIRE_INTERVAL=1.0） | 触屏节奏 |
+| 雪狼/劫匪/持盾/Boss | 600 / 800 / 1200(3破盾) / 3600 HP | 3 / 4 / 9 / ~16 发击杀（火力≈235/发） |
+| Boss 限时 | 30 秒 | 熟练可过、新手可输 |
+| 胜利奖励 | 食物+30、弹药+30、士气+5 | battle.gd |
+| 初始燃料 | 2000（Day 7：整圈高速油耗 1890 推演后 1500→2000） | game_state.gd |
+| 站收集燃料 | 30~60（Day 7：整圈推演后 20~40→30~60；collect_reward 同步修复 BUG-012） | game_config.gd / station_system.gd |
+| 生存单程时长 | 均速 200 km/h ≈ 43 分钟（420km 整圈模拟） | tests/day7_logic_test.gd |
 
 ---
 

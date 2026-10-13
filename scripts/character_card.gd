@@ -83,7 +83,7 @@ func _input(event: InputEvent) -> void:
 		elif get_global_rect().has_point(get_global_mouse_position()):
 			card_clicked.emit()
 
-func _process(delta: float) -> void:
+func _process(_delta: float) -> void:
 	if is_preview:
 		return
 	if _mouse_down and not _is_dragging:

@@ -1,0 +1,13 @@
+<svg width="64" height="64" viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg">
+  <!-- 登车图标：蒸汽机车侧影 -->
+  <g stroke="#E4C67E" stroke-width="2.2" fill="none" stroke-linejoin="round">
+    <path d="M6 44 h56 v-8 h-12 l-6-10 h-16 l-6 10 H6 Z" fill="#1B2330"/>
+    <rect x="6" y="14" width="26" height="12" rx="3" fill="#1B2330"/>
+    <circle cx="50" cy="16" r="6.5" fill="#1B2330"/>
+    <path d="M6 18 h12 M10 22 h8" stroke-width="2"/>
+  </g>
+  <circle cx="17" cy="52" r="4.6" fill="#1B2330" stroke="#E4C67E" stroke-width="2"/>
+  <circle cx="31" cy="52" r="4.6" fill="#1B2330" stroke="#E4C67E" stroke-width="2"/>
+  <circle cx="45" cy="52" r="4.6" fill="#1B2330" stroke="#E4C67E" stroke-width="2"/>
+  <path d="M14 26 h10 M18 10 c0 0 2 -4 5 -4 s3 2 6 2" stroke-width="2"/>
+</svg>

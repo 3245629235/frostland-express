@@ -1,0 +1,7 @@
+<svg width="64" height="64" viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg">
+  <!-- 燃料图标：煤块 + 火苗 -->
+  <path d="M18 40 L32 18 L46 40 Q40 48 32 48 Q24 48 18 40 Z" fill="#3A3F4B" stroke="#F5D9A0" stroke-width="1.6"/>
+  <path d="M18 40 L32 18 L46 40" fill="none" stroke="#565D6D" stroke-width="1"/>
+  <path d="M27 44 Q29 35 33 33 Q37 40 32 45.5 Q30.5 47.5 28.5 47.5 Q26.5 47.5 27 44 Z" fill="#F0A93B" opacity="0.95"/>
+  <path d="M29.5 43.5 Q30.8 38.5 33 37.5 Q35.2 41.5 32.3 44.6 Q31 45.6 30 45.2 Q29.2 44.6 29.5 43.5 Z" fill="#FFD97E" opacity="0.9"/>
+</svg>

@@ -71,6 +71,7 @@ var vehicle_target_height: float = 0.0
 
 
 func _ready() -> void:
+	AudioManager.play_bgm("main")
 	back_button.pressed.connect(_on_back_pressed)
 	clear_all_button.pressed.connect(_on_clear_all_pressed)
 	_setup_build_menu()
@@ -504,6 +505,7 @@ func _update_debug_label() -> void:
 
 
 func _on_back_pressed() -> void:
+	AudioManager.play_back()
 	TrainSave.save_train(placed_vehicles, player_inventory, vehicle_data)
 
 	var loco_count = TrainPlacement.count_type(TYPE_LOCO, placed_vehicles)

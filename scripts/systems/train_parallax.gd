@@ -62,7 +62,7 @@ func _create_parallax_sprites(container: Control, tex: Texture2D, scaled_w: floa
 		t.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		container.add_child(t)
 
-func process(delta: float, has_vehicles: bool) -> void:
+func process(delta: float, _has_vehicles: bool) -> void:
 	if not is_dragging_screen:
 		momentum *= 0.92
 		target_scroll += momentum
@@ -93,7 +93,7 @@ func _update_layer_positions(container: Control, scaled_w: float, offset: float)
 		sp.offset_left = x
 		sp.offset_right = x + scaled_w
 
-func update_max_scroll(placed_vehicles: Array, train_start_x_ratio: float) -> void:
+func update_max_scroll(placed_vehicles: Array, _train_start_x_ratio: float) -> void:
 	if placed_vehicles.is_empty():
 		max_scroll = cf_scaled_width * train_length - view_w
 	else:
